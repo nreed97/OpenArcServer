@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<objects xmlns="http://www.springframework.net">
+    <!-- Client objects -->
+    <object name="ClientAnnCache" singleton="true" type="ArcClientEngine.ArcCaches.AnnCache, ArcClientEngine" />
+    <object name="ClientArcConnectsCache" singleton="true" type="ArcClientEngine.ArcCaches.ArcConnectsCache, ArcClientEngine" />
+    <object name="ClientDxCache" singleton="true" type="ArcClientEngine.ArcCaches.DxCache, ArcClientEngine" />
+    <object name="ClientDxccCache" singleton="true" type="ArcClientEngine.ArcCaches.DxccCache, ArcClientEngine" />
+    <object name="ClientBuddyCache" singleton="true" type="ArcClientEngine.ArcCaches.BuddyCache, ArcClientEngine" />
+    <object name="ClientTalkCache" singleton="true" type="ArcClientEngine.ArcCaches.TalkCache, ArcClientEngine" />
+    <object name="ClientWxCache" singleton="true" type="ArcClientEngine.ArcCaches.WxCache, ArcClientEngine" />
+    <object name="ClientWwvCache" singleton="true" type="ArcClientEngine.ArcCaches.WwvCache, ArcClientEngine" />
+    <object name="ClientCtyHdgDistCache" singleton="true" type="ArcClientEngine.ArcCaches.CtyHdgDistCache, ArcClientEngine" />
+    <object name="ClientMultimediaCache" singleton="true" type="ArcClientEngine.ArcCaches.MultimediaCache, ArcClientEngine" />
+    <object name="ClientStatesCache" singleton="true" type="ArcClientEngine.ArcCaches.StatesCache, ArcClientEngine" />
+    <object name="ClientProvincesCache" singleton="true" type="ArcClientEngine.ArcCaches.ProvincesCache, ArcClientEngine" />
+    <object name="ClientCtyCache" singleton="true" type="ArcClientEngine.ArcCaches.CtyCache, ArcClientEngine" />
+
+    <!-- Client telnet commands -->
+    <object name="SetDxFilter" singleton="false" type="ArcClientEngine.CmdProcessing.UserCmds.SetDxFilter, ArcClientEngine" />
+    <object name="SetDxExtension" singleton="false" type="ArcClientEngine.CmdProcessing.UserCmds.SetDxExtension, ArcClientEngine" />
+    <object name="ShowDxFilter" singleton="false" type="ArcClientEngine.CmdProcessing.UserCmds.ShowDxFilter, ArcClientEngine" />
+    <object name="ShowUsers" singleton="false" type="ArcClientEngine.CmdProcessing.UserCmds.ShowUsers, ArcClientEngine" />
+    <object name="Bye" singleton="false" type="ArcClientEngine.CmdProcessing.UserCmds.Bye, ArcClientEngine" />
+
+</objects>

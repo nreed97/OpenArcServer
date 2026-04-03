@@ -1,0 +1,8 @@
+#ARC Private Chat Room List - edit as desired
+#
+#Name followed by various routes - nodes that connect directly to your node
+#EX:
+#AUS=AB5K,K5NA, K5AB
+#
+AUS=AB5K,K5NA,K5AB
+TX=AB5K,AB5K-1,AB5K-2,AB5K-3,AB5K-4,AB5K-5,K5NA,K5AB,KA5EYH-1,KA5EYH-2,K5DX,K1NT,WF5E,K5UTD,N1EW,W0UO

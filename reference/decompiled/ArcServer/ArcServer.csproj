@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+  <PropertyGroup>
+    <AssemblyName>ArcServer</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>True</UseWindowsForms>
+    <TargetFramework>net40</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <RootNamespace />
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="ArcServer.Images.HealthOk.ico" />
+    <None Remove="ArcServer.Images.Check2.png" />
+    <None Remove="ArcServer.Images.Health2.png" />
+    <None Remove="ArcServer.Images.HealthBad.ICO" />
+    <EmbeddedResource Include="ArcServer.Images.HealthOk.ico" LogicalName="ArcServer.Images.HealthOk.ico" />
+    <EmbeddedResource Include="ArcServer.Images.Check2.png" LogicalName="ArcServer.Images.Check2.png" />
+    <EmbeddedResource Include="ArcServer.Images.Health2.png" LogicalName="ArcServer.Images.Health2.png" />
+    <EmbeddedResource Include="ArcServer.Images.HealthBad.ICO" LogicalName="ArcServer.Images.HealthBad.ICO" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="ArcInterfaces">
+      <HintPath>..\..\app\ArcInterfaces.dll</HintPath>
+    </Reference>
+    <Reference Include="WeifenLuo.WinFormsUI.Docking">
+      <HintPath>..\..\app\WeifenLuo.WinFormsUI.Docking.dll</HintPath>
+    </Reference>
+    <Reference Include="ArcShared">
+      <HintPath>..\..\app\ArcShared.dll</HintPath>
+    </Reference>
+    <Reference Include="log4net">
+      <HintPath>..\..\app\log4net.dll</HintPath>
+    </Reference>
+    <Reference Include="ArcEngine">
+      <HintPath>..\..\app\ArcEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="ZedGraph">
+      <HintPath>..\..\app\ZedGraph.dll</HintPath>
+    </Reference>
+    <Reference Include="ArcClientUi">
+      <HintPath>..\..\app\ArcClientUi.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

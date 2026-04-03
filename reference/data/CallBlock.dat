@@ -1,0 +1,11 @@
+#------------------------------------------------------------------------------------------------------------------------
+# Call Block List - A list of cluster abusers.  Spots from these calls are blocked.
+# This list is downloaded from the server every night.   You can maintain your own list by adding a MyCallBlock.dat file
+#------------------------------------------------------------------------------------------------------------------------
+007
+MYCALL
+NOCALL
+OO7
+PK232
+5Z4FT
+KI4LTH

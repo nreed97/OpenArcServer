@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<objects xmlns="http://www.springframework.net">
+    <!-- Caches -->
+
+    <object name="BadWordCache" singleton="true" type="ArcEngine.ArcCaches.BadWordCache, ArcEngine" />
+    <object name="BandModeCache" singleton="true" type="ArcEngine.ArcCaches.BandModeCache, ArcEngine" />
+    <object name="CtyCache" singleton="true" type="ArcEngine.ArcCaches.CtyCache, ArcEngine" />
+    <object name="ChatRoomPvtCache" singleton="true" type="ArcEngine.ArcCaches.ChatRoomPvtCache, ArcEngine" />
+    <object name="ChatRoomPubCache" singleton="true" type="ArcEngine.ArcCaches.ChatRoomPubCache, ArcEngine" />
+    <object name="DxSpotBlockCache" singleton="true" type="ArcEngine.ArcCaches.DxSpotBlockCache, ArcEngine" />
+    <object name="DxClusterListCache" singleton="true" type="ArcEngine.ArcCaches.DxClusterListCache, ArcEngine" />
+    <object name="LotwCache" singleton="true" type="ArcEngine.ArcCaches.LotwCache, ArcEngine" />
+    <object name="MasterCallCache" singleton="true" type="ArcEngine.ArcCaches.MasterCallCache, ArcEngine" />
+    <object name="DxSpotUniqueCache" singleton="true" type="ArcEngine.ArcCaches.DxSpotUniqueCache, ArcEngine" />
+    <object name="UserCache" singleton="true" type="ArcEngine.ArcCaches.UserCache, ArcEngine" />
+    <object name="CallBlockCache" singleton="true" type="ArcEngine.ArcCaches.CallBlockCache, ArcEngine" />
+    <object name="ConnectBlockCache" singleton="true" type="ArcEngine.ArcCaches.ConnectBlockCache, ArcEngine" />
+    <object name="MailCache" singleton="true" type="ArcEngine.ArcCaches.MailCache, ArcEngine" />
+    <object name="IpLockoutCache" singleton="true" type="ArcEngine.ArcCaches.IpLockoutCache, ArcEngine" />
+    <object name="ConnectsCache" singleton="true" type="ArcEngine.ArcCaches.ConnectsCache, ArcEngine" />
+    <object name="ProtocolCache" singleton="true" type="ArcEngine.ArcCaches.ProtocolCache, ArcEngine" />
+    <object name="WsPcxxCache" singleton="true" type="ArcEngine.ArcCaches.WsPcxxCache, ArcEngine" />
+    <object name="CallBookExtCache" singleton="true" type="ArcEngine.ArcCaches.CallBookExtCache, ArcEngine" />
+    <object name="Top100Cache" singleton="true" type="ArcEngine.ArcCaches.Top100Cache, ArcEngine" />
+    <object name="LoginMsgCache" singleton="true" type="ArcEngine.ArcCaches.LoginMsgCache, ArcEngine" />
+    <object name="FocCache" singleton="true" type="ArcEngine.ArcCaches.FocCache, ArcEngine" />
+    <object name="SkimmerCt1bohCache" singleton="true" type="ArcEngine.ArcCaches.SkimmerCt1bohCache, ArcEngine" />
+    
+    <object name="UsVeCallbook" singleton="true" type="ArcEngine.Callbook.UsVeCallbook, ArcEngine" >
+        <constructor-arg index="0" ref="CallBookExtCache" />
+        <constructor-arg index="1" value="\Cfg\UsVeCallbook\" />
+    </object>
+
+    <!-- Ann commands -->
+    <object name="AnnHelp" singleton="false" type="ArcEngine.ArcCmds.User.Ann.AnnHelp, ArcEngine" />
+    <object name="AnnLocalUser" singleton="false" type="ArcEngine.ArcCmds.AnnWx.AnnLocalUser, ArcEngine" />
+    <object name="AnnFullUser" singleton="false" type="ArcEngine.ArcCmds.AnnWx.AnnFullUser, ArcEngine" />
+    <object name="AnnFullHelp" singleton="false" type="ArcEngine.ArcCmds.AnnWx.AnnFullHelp, ArcEngine" />
+    <object name="SetAnnChatRooms" singleton="false" type="ArcEngine.ArcCmds.User.Ann.SetAnnChatRooms, ArcEngine" />
+    <object name="SetAnnChatRoomsHelp" singleton="false" type="ArcEngine.ArcCmds.User.Ann.SetAnnChatRoomsHelp, ArcEngine" />
+    <object name="SetAnnCount" singleton="false" type="ArcEngine.ArcCmds.User.Ann.SetAnnCount, ArcEngine" />
+    <object name="SetAnnCountHelp" singleton="false" type="ArcEngine.ArcCmds.User.Ann.SetAnnCountHelp, ArcEngine" />
+    <object name="SetAnnDefault" singleton="false" type="ArcEngine.ArcCmds.User.Ann.SetAnnDefault, ArcEngine" />
+    <object name="SetAnnDefaultHelp" singleton="false" type="ArcEngine.ArcCmds.User.Ann.SetAnnDefaultHelp, ArcEngine" />
+    <object name="SetAnnFilter" singleton="false" type="ArcEngine.ArcCmds.User.Ann.SetAnnFilter, ArcEngine" />
+    <object name="SetAnnFilterHelp" singleton="false" type="ArcEngine.ArcCmds.User.Ann.SetAnnFilterHelp, ArcEngine" />
+    <object name="SetAnnMode" singleton="false" type="ArcEngine.ArcCmds.User.Ann.SetAnnMode, ArcEngine" />
+    <object name="SetAnnModeHelp" singleton="false" type="ArcEngine.ArcCmds.User.Ann.SetAnnModeHelp, ArcEngine" />
+    <object name="SetAnnWrap" singleton="false" type="ArcEngine.ArcCmds.User.Ann.SetAnnWrap, ArcEngine" />
+    <object name="SetAnnWrapHelp" singleton="false" type="ArcEngine.ArcCmds.User.Ann.SetAnnWrapHelp, ArcEngine" />
+    <object name="SetAnnOutput" singleton="false" type="ArcEngine.ArcCmds.User.Ann.SetAnnOutput, ArcEngine" />
+    <object name="SetAnnOutputHelp" singleton="false" type="ArcEngine.ArcCmds.User.Ann.SetAnnOutputHelp, ArcEngine" />
+    <object name="ShowAnn" singleton="false" type="ArcEngine.ArcCmds.User.Ann.ShowAnn, ArcEngine" />
+    <object name="ShowAnnHelp" singleton="false" type="ArcEngine.ArcCmds.User.Ann.ShowAnnHelp, ArcEngine" />
+    <object name="ShowAnnOptions" singleton="false" type="ArcEngine.ArcCmds.User.Ann.ShowAnnOptions, ArcEngine" />
+    <object name="ShowAnnOptionsHelp" singleton="false" type="ArcEngine.ArcCmds.User.Ann.ShowAnnOptionsHelp, ArcEngine" />
+
+    <!-- Talk commands -->
+    <object name="Talk" singleton="false" type="ArcEngine.ArcCmds.User.Talk.Talk, ArcEngine" />
+    <object name="TalkHelp" singleton="false" type="ArcEngine.ArcCmds.User.Talk.TalkHelp, ArcEngine" />
+
+    <!-- DX commands -->
+    <object name="DxSpotUser" singleton="false" type="ArcEngine.ArcCmds.Dx.DxSpotUser, ArcEngine" />
+    <object name="DxHelp" singleton="false" type="ArcEngine.ArcCmds.User.Dx.DxHelp, ArcEngine" />
+    <object name="DxTest" singleton="false" type="ArcEngine.ArcCmds.Dx.DxSpotUser, ArcEngine" />
+    <object name="SetDx" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDx, ArcEngine" />
+    <object name="SetDxHelp" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDxHelp, ArcEngine" />
+    <object name="SetDxExtension" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDxExtension, ArcEngine" />
+    <object name="SetDxExtensionHelp" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDxExtensionHelp, ArcEngine" />
+    <object name="SetDxCount" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDxCount, ArcEngine" />
+    <object name="SetDxCountHelp" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDxCountHelp, ArcEngine" />
+    <object name="SetDxDefault" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDxDefault, ArcEngine" />
+    <object name="SetDxDefaultHelp" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDxDefaultHelp, ArcEngine" />
+    <object name="SetDxFilter" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDxFilter, ArcEngine" />
+    <object name="SetDxFilterHelp" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDxFilterHelp, ArcEngine" />
+    <object name="SetDxMode" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDxMode, ArcEngine" />
+    <object name="SetDxModeHelp" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDxModeHelp, ArcEngine" />
+    <object name="SetDxOutput" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDxOutput, ArcEngine" />
+    <object name="SetDxOutputHelp" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDxOutputHelp, ArcEngine" />
+    <object name="ShowDx" singleton="false" type="ArcEngine.ArcCmds.User.Dx.ShowDx, ArcEngine" />
+    <object name="ShowDxOptions" singleton="false" type="ArcEngine.ArcCmds.User.Dx.ShowDxOptions, ArcEngine" />
+    <object name="ShowDxHelp" singleton="false" type="ArcEngine.ArcCmds.User.Dx.ShowDxHelp, ArcEngine" />
+    <object name="ShowDxOptionsHelp" singleton="false" type="ArcEngine.ArcCmds.User.Dx.ShowDxOptionsHelp, ArcEngine" />
+    <object name="ShowDxFilter" singleton="false" type="ArcEngine.ArcCmds.User.Dx.ShowDxFilter, ArcEngine" />
+    <object name="PrintDxFilters" singleton="false" type="ArcEngine.ArcCmds.User.Dx.PrintDxFilters, ArcEngine" />
+    <object name="SetDxArPc" singleton="false" type="ArcEngine.ArcCmds.User.Dx.SetDxArPc, ArcEngine" />
+
+
+    <!-- Network commands -->
+    <object name="PCxx" singleton="false" type="ArcEngine.ArcCmds.User.Network.PCxx, ArcEngine" />
+    <object name="Bye" singleton="false" type="ArcEngine.ArcCmds.User.Network.Bye, ArcEngine" />
+    <object name="ByeHelp" singleton="false" type="ArcEngine.ArcCmds.User.Network.ByeHelp, ArcEngine" />
+    <object name="Clear" singleton="false" type="ArcEngine.ArcCmds.User.Network.Clear, ArcEngine" />
+    <object name="ClearHelp" singleton="false" type="ArcEngine.ArcCmds.User.Network.ClearHelp, ArcEngine" />
+    <object name="NetworkHelp" singleton="false" type="ArcEngine.ArcCmds.User.Network.NetworkHelp, ArcEngine" />
+    <object name="ShowAux" singleton="false" type="ArcEngine.ArcCmds.User.Network.ShowAux, ArcEngine" />
+    <object name="ShowCluster" singleton="false" type="ArcEngine.ArcCmds.User.Network.ShowCluster, ArcEngine" />
+    <object name="ShowSkimmer" singleton="false" type="ArcEngine.ArcCmds.User.Network.ShowSkimmer, ArcEngine" />
+    <object name="ShowSkimCty" singleton="false" type="ArcEngine.ArcCmds.User.Network.ShowSkimCty, ArcEngine" />
+    <object name="ShowConnects" singleton="false" type="ArcEngine.ArcCmds.User.Network.ShowConnects, ArcEngine" />
+    <object name="ShowClusterHelp" singleton="false" type="ArcEngine.ArcCmds.User.Network.ShowClusterHelp, ArcEngine" />
+    <object name="ShowLog" singleton="false" type="ArcEngine.ArcCmds.User.Network.ShowLog, ArcEngine" />
+    <object name="ShowLogHelp" singleton="false" type="ArcEngine.ArcCmds.User.Network.ShowLogHelp, ArcEngine" />
+    <object name="ShowNetwork" singleton="false" type="ArcEngine.ArcCmds.User.Network.ShowNetwork, ArcEngine" />
+    <object name="ShowNetworkHelp" singleton="false" type="ArcEngine.ArcCmds.User.Network.ShowNetworkHelp, ArcEngine" />
+    <object name="ShowNodes" singleton="false" type="ArcEngine.ArcCmds.User.Network.ShowNodes, ArcEngine" />
+    <object name="ShowNodesHelp" singleton="false" type="ArcEngine.ArcCmds.User.Network.ShowNodesHelp, ArcEngine" />
+    <object name="ShowUsers" singleton="false" type="ArcEngine.ArcCmds.User.Network.ShowUsers, ArcEngine" />
+    <object name="ShowUsersHelp" singleton="false" type="ArcEngine.ArcCmds.User.Network.ShowUsersHelp, ArcEngine" />
+
+    <!-- Operating commands -->
+    <object name="OperatingHelp" singleton="false" type="ArcEngine.ArcCmds.User.Operating.OperatingHelp, ArcEngine" />
+    <object name="ShowContestStation" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowContestStation, ArcEngine" />
+    <object name="ShowContestStationHelp" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowContestStationHelp, ArcEngine" />
+    <object name="ShowDateTime" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowDateTime, ArcEngine" />
+    <object name="ShowDateTimeHelp" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowDateTimeHelp, ArcEngine" />
+    <object name="ShowGrayline" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowGrayline, ArcEngine" />
+    <object name="ShowGraylineHelp" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowGraylineHelp, ArcEngine" />
+    <object name="ShowHam" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowHam, ArcEngine" />
+    <object name="ShowHamHelp" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowHamHelp, ArcEngine" />
+    
+    <object name="ShowHamQth" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowHamQth, ArcEngine" />
+    <object name="ShowHamQthHelp" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowHamQthHelp, ArcEngine" />
+    
+    <object name="ShowHeading" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowHeading, ArcEngine" />
+    <object name="ShowHeadingHelp" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowHeadingHelp, ArcEngine" />
+    <object name="ShowPrefix" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowPrefix, ArcEngine" />
+    <object name="ShowPrefixHelp" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowPrefixHelp, ArcEngine" />
+    <object name="ShowQslInfo" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowQslInfo, ArcEngine" />
+    <object name="ShowQslInfoHelp" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowQslInfoHelp, ArcEngine" />
+    <object name="ShowSun" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowSun, ArcEngine" />
+    <object name="ShowSunHelp" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowSunHelp, ArcEngine" />
+    <object name="ShowUptime" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowUptime, ArcEngine" />
+    <object name="ShowUptimeHelp" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowUptimeHelp, ArcEngine" />
+    <object name="ShowPerformance" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowPerformance, ArcEngine" />
+    <object name="ShowVersion" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowVersion, ArcEngine" />
+    <object name="ShowVersionHelp" singleton="false" type="ArcEngine.ArcCmds.User.Operating.ShowVersionHelp, ArcEngine" />
+
+    <!-- Station commands -->
+    <object name="StationHelp" singleton="false" type="ArcEngine.ArcCmds.User.Station.StationHelp, ArcEngine" />
+    <object name="SetStationEmail" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationEmail, ArcEngine" />
+    <object name="SetStationEmailHelp" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationEmailHelp, ArcEngine" />
+    <object name="SetStationGrid" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationGrid, ArcEngine" />
+    <object name="SetStationGridHelp" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationGridHelp, ArcEngine" />
+    <object name="SetStationHere" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationHere, ArcEngine" />
+    <object name="SetStationHereHelp" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationHereHelp, ArcEngine" />
+    <object name="SetStationLatLon" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationLatLon, ArcEngine" />
+    <object name="SetStationLatLonHelp" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationLatLonHelp, ArcEngine" />
+    <object name="SetStationMacros" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationMacros, ArcEngine" />
+    <object name="SetStationMacrosHelp" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationMacrosHelp, ArcEngine" />
+    <object name="SetStationName" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationName, ArcEngine" />
+    <object name="SetStationNameHelp" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationNameHelp, ArcEngine" />
+    <object name="SetStationNeeds" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationNeeds, ArcEngine" />
+    <object name="SetStationNeedsHelp" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationNeedsHelp, ArcEngine" />
+    <object name="SetStationPhone" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationPhone, ArcEngine" />
+    <object name="SetStationPhoneHelp" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationPhoneHelp, ArcEngine" />
+    <object name="SetStationQth" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationQth, ArcEngine" />
+    <object name="SetStationQthHelp" singleton="false" type="ArcEngine.ArcCmds.User.Station.SetStationQthHelp, ArcEngine" />
+    <object name="ShowStation" singleton="false" type="ArcEngine.ArcCmds.User.Station.ShowStation, ArcEngine" />
+    <object name="ShowStationHelp" singleton="false" type="ArcEngine.ArcCmds.User.Station.ShowStationHelp, ArcEngine" />
+
+
+    <!-- Wwv commands -->
+    <object name="WwvHelp" singleton="false" type="ArcEngine.ArcCmds.User.Wwv.WwvHelp, ArcEngine" />
+    <object name="SetWwvCount" singleton="false" type="ArcEngine.ArcCmds.User.Wwv.SetWwvCount, ArcEngine" />
+    <object name="SetWwvCountHelp" singleton="false" type="ArcEngine.ArcCmds.User.Wwv.SetWwvCountHelp, ArcEngine" />
+    <object name="SetWwvDefault" singleton="false" type="ArcEngine.ArcCmds.User.Wwv.SetWwvDefault, ArcEngine" />
+    <object name="SetWwvDefaultHelp" singleton="false" type="ArcEngine.ArcCmds.User.Wwv.SetWwvDefaultHelp, ArcEngine" />
+    <object name="SetWwvOutput" singleton="false" type="ArcEngine.ArcCmds.User.Wwv.SetWwvOutput, ArcEngine" />
+    <object name="SetWwvOutputHelp" singleton="false" type="ArcEngine.ArcCmds.User.Wwv.SetWwvOutputHelp, ArcEngine" />
+    <object name="ShowWwv" singleton="false" type="ArcEngine.ArcCmds.User.Wwv.ShowWwv, ArcEngine" />
+    <object name="ShowWwvHelp" singleton="false" type="ArcEngine.ArcCmds.User.Wwv.ShowWwvHelp, ArcEngine" />
+    <object name="ShowWwvOptions" singleton="false" type="ArcEngine.ArcCmds.User.Wwv.ShowWwvOptions, ArcEngine" />
+    <object name="ShowWwvOptionsHelp" singleton="false" type="ArcEngine.ArcCmds.User.Wwv.ShowWwvOptionsHelp, ArcEngine" />
+
+    <!-- Wx commands -->
+    <object name="WxHelp" singleton="false" type="ArcEngine.ArcCmds.User.Wx.WxHelp, ArcEngine" />
+    <object name="WxLocalUser" singleton="false" type="ArcEngine.ArcCmds.AnnWx.WxLocalUser, ArcEngine" />
+    <object name="WxFullHelp" singleton="false" type="ArcEngine.ArcCmds.AnnWx.WxFullHelp, ArcEngine" />
+    <object name="WxFullUser" singleton="false" type="ArcEngine.ArcCmds.AnnWx.WxFullUser, ArcEngine" />
+    <object name="SetWxCount" singleton="false" type="ArcEngine.ArcCmds.User.Wx.SetWxCount, ArcEngine" />
+    <object name="SetWxCountHelp" singleton="false" type="ArcEngine.ArcCmds.User.Wx.SetWxCountHelp, ArcEngine" />
+    <object name="SetWxDefault" singleton="false" type="ArcEngine.ArcCmds.User.Wx.SetWxDefault, ArcEngine" />
+    <object name="SetWxDefaultHelp" singleton="false" type="ArcEngine.ArcCmds.User.Wx.SetWxDefaultHelp, ArcEngine" />
+    <object name="SetWxFilter" singleton="false" type="ArcEngine.ArcCmds.User.Wx.SetWxFilter, ArcEngine" />
+    <object name="SetWxFilterHelp" singleton="false" type="ArcEngine.ArcCmds.User.Wx.SetWxFilterHelp, ArcEngine" />
+    <object name="SetWxMode" singleton="false" type="ArcEngine.ArcCmds.User.Wx.SetWxMode, ArcEngine" />
+    <object name="SetWxModeHelp" singleton="false" type="ArcEngine.ArcCmds.User.Wx.SetWxModeHelp, ArcEngine" />
+    <object name="SetWxOutput" singleton="false" type="ArcEngine.ArcCmds.User.Wx.SetWxOutput, ArcEngine" />
+    <object name="SetWxOutputHelp" singleton="false" type="ArcEngine.ArcCmds.User.Wx.SetWxOutputHelp, ArcEngine" />
+    <object name="ShowWx" singleton="false" type="ArcEngine.ArcCmds.User.Wx.ShowWx, ArcEngine" />
+    <object name="ShowWxHelp" singleton="false" type="ArcEngine.ArcCmds.User.Wx.ShowWxHelp, ArcEngine" />
+    <object name="ShowWxOptions" singleton="false" type="ArcEngine.ArcCmds.User.Wx.ShowWxOptions, ArcEngine" />
+    <object name="ShowWxOptionsHelp" singleton="false" type="ArcEngine.ArcCmds.User.Wx.ShowWxOptionsHelp, ArcEngine" />
+
+    <!-- Node commands -->
+    <object name="Ar17DxSpot" singleton="false" type="ArcEngine.ArcCmds.Dx.DxSpotAr17, ArcEngine" />
+    <object name="Ar19AnnWx" singleton="false" type="ArcEngine.ArcCmds.AnnWx.AnnWxAr19, ArcEngine" />
+    <object name="Pc11DxSpot" singleton="false" type="ArcEngine.ArcCmds.Dx.DxSpotPc11, ArcEngine" />
+    <object name="Pc12AnnWx" singleton="false" type="ArcEngine.ArcCmds.AnnWx.AnnWxPc12, ArcEngine" />
+    <object name="Pc18Init" singleton="false" type="ArcEngine.ArcCmds.Node.Pc.InitPc18, ArcEngine" />
+    <object name="Pc20InitTurnaround" singleton="false" type="ArcEngine.ArcCmds.Node.Pc.InitTurnaroundPc20, ArcEngine" />
+    <object name="Pc22InitComplete" singleton="false" type="ArcEngine.ArcCmds.Node.Pc.InitCompletePc22, ArcEngine" />
+    <object name="Pc23WwvSpot" singleton="false" type="ArcEngine.ArcCmds.Wwv.WwvSpotPc23, ArcEngine" />
+    <object name="Pc38InitStart" singleton="false" type="ArcEngine.ArcCmds.Node.Pc.InitStartPc38, ArcEngine" />
+    <object name="Pc41UserInfo" singleton="false" type="ArcEngine.ArcCmds.Node.Pc.UserInfoPc41, ArcEngine" />
+    <object name="Pc51Ping" singleton="false" type="ArcEngine.ArcCmds.Node.Pc.PingPc51, ArcEngine" />
+    <object name="PcxxNetCmdQueue" singleton="false" type="ArcEngine.ArcCmds.Node.Pc.PcxxNetCmdQueue, ArcEngine" />
+
+    <!-- Node commands used by the single threaded command parser -->
+    <object name="PC16" singleton="false" type="ArcEngine.ArcCmds.Node.Pc.AddUserPc16, ArcEngine" />
+    <object name="PC17" singleton="false" type="ArcEngine.ArcCmds.Node.Pc.DeleteUserPc17, ArcEngine" />
+    <object name="PC19" singleton="false" type="ArcEngine.ArcCmds.Node.Pc.AddNodePc19, ArcEngine" />
+    <object name="PC21" singleton="false" type="ArcEngine.ArcCmds.Node.Pc.DeleteNodePc21, ArcEngine" />
+
+    <!-- Client Ios -->
+    <object name="Ar99DxSpotTelnet" singleton="false" type="ArcEngine.ArcCmds.Dx.DxSpotTelnet, ArcEngine" />
+    <object name="Ar98DxSpotMirc" singleton="false" type="ArcEngine.ArcCmds.Dx.DxSpotMirc, ArcEngine" />
+
+    <!-- 
+  <object name="Ar96DxSpotRevBcn" singleton="false" type="ArcEngine.ArcCmds.Dx.DxSpotRevBcn, ArcEngine" />
+-->
+
+    <!-- Arx new commands -->
+    <object name="DxSpotArx" singleton="false" type="ArcEngine.ArcCmds.Dx.DxSpotArx, ArcEngine" />
+    <object name="AnnWxArx" singleton="false" type="ArcEngine.ArcCmds.AnnWx.AnnWxArx, ArcEngine" />
+    <object name="WwvSpotArx" singleton="false" type="ArcEngine.ArcCmds.Wwv.WwvSpotArx, ArcEngine" />
+    <object name="DxSpotClient" singleton="false" type="ArcEngine.ArcCmds.Dx.DxSpotClient, ArcEngine" />
+    <object name="AnnWxSpotClient" singleton="false" type="ArcEngine.ArcCmds.AnnWx.AnnWxSpotClient, ArcEngine" />
+
+    <!-- Help User commands -->
+    <object name="Help" singleton="false" type="ArcEngine.ArcCmds.User.Help, ArcEngine" />
+
+    <!-- ARC4 Legacy Ann commands -->
+    <object name="SetAnnouncements" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Ann.SetAnnouncements, ArcEngine" />
+    <object name="SetNoAnnouncements" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Ann.SetNoAnnouncements, ArcEngine" />
+
+    <!-- ARC4 Legacy DX commands -->
+    <object name="SetDxsCty" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Dx.SetDxsCty, ArcEngine" />
+    <object name="SetNoDxsCty" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Dx.SetNoDxsCty, ArcEngine" />
+    <object name="SetDxAnnouncements" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Dx.SetDxAnnouncements, ArcEngine" />
+    <object name="SetNoDxAnnouncements" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Dx.SetNoDxAnnouncements, ArcEngine" />
+    <object name="SetDxBob" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Dx.SetDxBob, ArcEngine" />
+    <object name="SetDxsQth" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Dx.SetDxsQth, ArcEngine" />
+    <object name="SetNoDxBob" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Dx.SetNoDxBob, ArcEngine" />
+    <object name="SetNoDxsQth" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Dx.SetNoDxsQth, ArcEngine" />
+
+    <!-- ARC4 Legacy Network commands -->
+    <object name="SetLogin" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Network.SetLogin, ArcEngine" />
+    <object name="SetNoLogin" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Network.SetNoLogin, ArcEngine" />
+
+    <!-- ARC4 Legacy Operating commands -->
+    <object name="SetBeep" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Operating.SetBeep, ArcEngine" />
+    <object name="SetNoBeep" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Operating.SetNoBeep, ArcEngine" />
+
+    <!-- ARC4 Legacy Talk commands -->
+    <object name="SetNoTalk" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Talk.SetNoTalk, ArcEngine" />
+    <object name="SetTalk" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Talk.SetTalk, ArcEngine" />
+
+    <!-- ARC4 Legacy WWV commands -->
+    <object name="SetNoWwv" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Wwv.SetNoWwv, ArcEngine" />
+    <object name="SetWwv" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Wwv.SetWwv, ArcEngine" />
+
+    <!-- ARC4 Legacy WX commands -->
+    <object name="SetNoWeather" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Wx.SetNoWeather, ArcEngine" />
+    <object name="SetWeather" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Wx.SetWeather, ArcEngine" />
+
+    <!-- ARC4 Legacy Show commands -->
+    <object name="ShowSettings" singleton="false" type="ArcEngine.ArcCmds.User.Legacy.Operating.ShowSettings, ArcEngine" />
+
+
+</objects>
