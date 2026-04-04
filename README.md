@@ -10,7 +10,7 @@ Built through protocol analysis and compatibility research of the AR-Cluster Ser
 
 ## Status
 
-**Phase 3 complete — DX spot filtering, SET profile commands, TALK, ANN, WWV/WX propagation, skimmer toggle, and buddy list alerts all working.**
+**Phase 4 complete — Prometheus metrics, WebSocket server, REST API, admin dashboard, Docker support, and systemd/Windows service integration all working.**
 
 The server accepts telnet connections on port 7373, the AR-Cluster native ARx2 client protocol on port 3608 (confirmed from Wireshark captures of real K1TTT traffic), and inbound PCxx node connections on port 7300 for peering with DX Spider, CC Cluster, and other PCxx-compatible cluster nodes.
 
@@ -351,13 +351,144 @@ When a buddy connects or disconnects, online users who have them on their list r
 - [x] SH/STA station info (self + any callsign)
 - [x] Buddy list alerts (ADD/BUDDY, DEL/BUDDY, SH/BUDDY, connect/disconnect notifications)
 
-### Phase 4 — Modern Enhancements
-- [ ] WebSocket server for browser clients
-- [ ] REST API
-- [ ] Web-based admin dashboard
-- [ ] Docker container support
-- [ ] Prometheus metrics
-- [ ] Systemd/launchd service integration
+### Phase 4 — Modern Enhancements ✓
+- [x] Prometheus metrics (`/metrics` scraping endpoint, counters for connections/spots/commands)
+- [x] WebSocket server for browser clients (port 7374, JSON protocol, real-time spot feed)
+- [x] REST API (port 8080, `GET /api/spots`, `/api/users`, `/api/nodes`, `/api/wwv`, `/api/wx`, `/api/stats`)
+- [x] Admin REST endpoints (`POST /api/admin/announce`, `DELETE /api/admin/users/{callsign}`) protected by API key
+- [x] Web-based admin dashboard (`/` on port 8080 — dark-theme, live WebSocket feed, tabs for spots/users/nodes/propagation)
+- [x] Docker container support (`Dockerfile`, `docker-compose.yml`, `.dockerignore`)
+- [x] Systemd / launchd / Windows Service integration (`deploy/` directory, one-command install script)
+
+## Features (Phase 4)
+
+### REST API
+
+The server exposes a REST API on port 8080 (configurable via `appsettings.json`).
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/spots?count=N` | GET | Last *N* DX spots (max 500, default 20) |
+| `/api/users` | GET | Currently connected users |
+| `/api/nodes` | GET | Currently connected cluster nodes |
+| `/api/wwv?count=N` | GET | Last *N* WWV propagation reports |
+| `/api/wx?count=N` | GET | Last *N* WX weather reports |
+| `/api/stats` | GET | Server statistics (user count, spot count, server time) |
+| `/api/admin/announce` | POST | Broadcast announcement (requires `X-Admin-Key` header) |
+| `/api/admin/users/{callsign}` | DELETE | Disconnect a user (requires `X-Admin-Key` header) |
+| `/metrics` | GET | Prometheus metrics scrape endpoint |
+
+**Enable and configure** in `appsettings.json`:
+
+```json
+{
+  "Api": {
+    "Enabled": true,
+    "Port": 8080,
+    "BindAddress": "0.0.0.0",
+    "AdminKey": "your-secret-key"
+  }
+}
+```
+
+Set `AdminKey` (or override via environment variable `Api__AdminKey`) to enable admin endpoints.
+
+### Admin Dashboard
+
+Browse to `http://your-server:8080/` for the web admin dashboard:
+
+- **Dashboard** — live stat cards (users, nodes, WebSocket clients, total spots, server time) + recent spots table
+- **DX Spots** — paginated spot history with mode badges
+- **Users** — connected users with callsign, name, QTH, grid, connect time
+- **Nodes** — connected PCxx nodes with software and version
+- **Propagation** — latest WWV solar reports and WX weather posts
+- **Live Feed** — real-time DX spot stream via WebSocket (auto-reconnects)
+- **Admin** — broadcast announcements and disconnect users (API key required)
+
+### WebSocket Server
+
+The WebSocket server (port 7374) streams real-time DX spots to browser clients as structured JSON:
+
+```json
+{
+  "type": "dx_spot",
+  "call": "K1JT",
+  "spotter": "W1AW",
+  "freq": 14025.5,
+  "band": "20m",
+  "mode": "CW",
+  "comment": "Great signal!",
+  "cont": "NA",
+  "cqZone": 5,
+  "skimmer": false,
+  "timestamp": "2026-04-04T15:05:00.000Z"
+}
+```
+
+Connect with a callsign auth message:
+
+```json
+{ "type": "auth", "callsign": "W1AW" }
+```
+
+### Prometheus Metrics
+
+Metrics are exposed at `http://your-server:8080/metrics` in the standard Prometheus text format.
+
+Key metrics:
+- `openarcserver_telnet_connections_total` — total telnet connections accepted
+- `openarcserver_telnet_connections_active` — currently connected telnet users
+- `openarcserver_spots_total` — DX spots processed
+- `openarcserver_spots_distributed_total` — spots broadcast to users
+- `openarcserver_commands_total{command}` — command invocations by type
+- `openarcserver_arx_connections_active` — active ARx2 clients
+- `openarcserver_ws_connections_active` — active WebSocket clients
+
+### Docker
+
+```bash
+# Build and run with docker-compose
+docker-compose up -d
+
+# With custom settings
+NODE_CALLSIGN=W1AW-2 OPENARCSERVER_ADMIN_KEY=mykey docker-compose up -d
+
+# View logs
+docker-compose logs -f openarcserver
+```
+
+Port mapping: 7373 (Telnet), 3608 (ARx2), 7300 (PCxx), 7374 (WebSocket), 8080 (REST/Dashboard).
+
+Persistent volumes: `openarcserver-data` (database + data files), `openarcserver-logs`.
+
+### Systemd (Linux)
+
+```bash
+# Build and install as a systemd service (run as root)
+sudo bash deploy/install-linux.sh
+
+# Manage the service
+systemctl status openarcserver
+journalctl -u openarcserver -f
+```
+
+### launchd (macOS)
+
+```bash
+# Copy plist to LaunchDaemons (run as root)
+sudo cp deploy/com.openarcserver.plist /Library/LaunchDaemons/
+sudo launchctl load /Library/LaunchDaemons/com.openarcserver.plist
+```
+
+### Windows Service
+
+OpenArcServer automatically detects when it is running as a Windows Service (via `UseWindowsService()`). Install using the built-in `sc` command:
+
+```powershell
+dotnet publish src\OpenArcServer.Server -c Release -o C:\OpenArcServer
+sc create OpenArcServer binPath="C:\OpenArcServer\OpenArcServer.Server.exe" start=auto
+sc start OpenArcServer
+```
 
 ## Contributing
 

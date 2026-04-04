@@ -1,5 +1,8 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using OpenArcServer.Core.Configuration;
 using OpenArcServer.Core.Services;
 using OpenArcServer.Data;
@@ -14,6 +17,7 @@ using OpenArcServer.Protocols.Pcxx;
 using OpenArcServer.Protocols.Telnet;
 using OpenArcServer.Protocols.WebSocket;
 using OpenArcServer.Server.Services;
+using Prometheus;
 using Serilog;
 
 // Bootstrap Serilog early so startup errors are captured
@@ -25,11 +29,16 @@ try
 {
     // Pin content root to the binary's directory so appsettings.json is found
     // regardless of which directory `dotnet run` is invoked from.
-    var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+    var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     {
         Args = args,
         ContentRootPath = AppContext.BaseDirectory,
+        WebRootPath     = Path.Combine(AppContext.BaseDirectory, "wwwroot"),
     });
+
+    // Service integration (systemd, Windows Service, launchd)
+    builder.Host.UseSystemd();
+    builder.Host.UseWindowsService(opts => opts.ServiceName = "OpenArcServer");
 
     // Serilog
     builder.Services.AddSerilog((services, lc) => lc
@@ -50,7 +59,8 @@ try
     builder.Services.Configure<PcxxOptions>(builder.Configuration.GetSection("Pcxx"));
     builder.Services.Configure<RbnOptions>(builder.Configuration.GetSection("Rbn"));
     builder.Services.Configure<ArxServerOptions>(builder.Configuration.GetSection("Arx"));
-    builder.Services.Configure<WebSocketOptions>(builder.Configuration.GetSection("WebSocket"));
+    builder.Services.Configure<OpenArcServer.Core.Configuration.WebSocketOptions>(builder.Configuration.GetSection("WebSocket"));
+    builder.Services.Configure<ApiOptions>(builder.Configuration.GetSection("Api"));
 
     // Data layer
     builder.Services.AddSingleton<DatabaseInitializer>();
@@ -63,34 +73,34 @@ try
     // File-based lookups (registered as singletons, path resolved at startup)
     builder.Services.AddSingleton<ICtyLookup>(sp =>
     {
-        var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<DataFileOptions>>().Value;
+        var opts = sp.GetRequiredService<IOptions<DataFileOptions>>().Value;
         return new CtyDatParser(opts.CtyDatPath);
     });
     builder.Services.AddSingleton<IBandModeLookup>(sp =>
     {
-        var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<DataFileOptions>>().Value;
+        var opts = sp.GetRequiredService<IOptions<DataFileOptions>>().Value;
         return new BandModeParser(opts.BandModePath);
     });
 
     // Named filter lists — register as keyed services
     builder.Services.AddKeyedSingleton<IFilterList>("badwords", (sp, _) =>
     {
-        var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<DataFileOptions>>().Value;
+        var opts = sp.GetRequiredService<IOptions<DataFileOptions>>().Value;
         return (IFilterList)new FilterListParser(opts.BadWordPath);
     });
     builder.Services.AddKeyedSingleton<IFilterList>("callblock", (sp, _) =>
     {
-        var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<DataFileOptions>>().Value;
+        var opts = sp.GetRequiredService<IOptions<DataFileOptions>>().Value;
         return (IFilterList)new FilterListParser(opts.CallBlockPath);
     });
     builder.Services.AddKeyedSingleton<IFilterList>("connectblock", (sp, _) =>
     {
-        var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<DataFileOptions>>().Value;
+        var opts = sp.GetRequiredService<IOptions<DataFileOptions>>().Value;
         return (IFilterList)new FilterListParser(opts.ConnectBlockPath);
     });
     builder.Services.AddKeyedSingleton<IFilterList>("spotblock", (sp, _) =>
     {
-        var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<DataFileOptions>>().Value;
+        var opts = sp.GetRequiredService<IOptions<DataFileOptions>>().Value;
         return (IFilterList)new FilterListParser(opts.DxSpotBlockPath);
     });
 
@@ -112,7 +122,7 @@ try
         sp.GetRequiredKeyedService<IFilterList>("spotblock"),
         sp.GetRequiredKeyedService<IFilterList>("badwords"),
         sp.GetRequiredService<DuplicateSpotDetector>(),
-        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<SpotProcessingOptions>>(),
+        sp.GetRequiredService<IOptions<SpotProcessingOptions>>(),
         sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<DxSpotCommand>>()));
     builder.Services.AddSingleton<ShowDxCommand>();
     builder.Services.AddSingleton<ShowUsersCommand>();
@@ -217,10 +227,139 @@ try
     // Background maintenance
     builder.Services.AddHostedService<MaintenanceService>();
 
+    // Configure Kestrel to bind on the Api port
+    builder.WebHost.ConfigureKestrel((ctx, opts) =>
+    {
+        var apiOpts = ctx.Configuration.GetSection("Api").Get<ApiOptions>() ?? new ApiOptions();
+        if (apiOpts.Enabled)
+        {
+            var addr = apiOpts.BindAddress == "0.0.0.0"
+                ? System.Net.IPAddress.Any
+                : System.Net.IPAddress.Parse(apiOpts.BindAddress);
+            opts.Listen(addr, apiOpts.Port);
+        }
+    });
+
     var app = builder.Build();
 
     // Initialize database before starting
     app.Services.GetRequiredService<DatabaseInitializer>().Initialize();
+
+    // ── Static files (admin dashboard from wwwroot/) ──────────────────────
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+
+    // ── Prometheus metrics ────────────────────────────────────────────────
+    app.UseMetricServer("/metrics");
+
+    // ── REST API ──────────────────────────────────────────────────────────
+    var api = app.MapGroup("/api");
+
+    // GET /api/spots[?count=N]
+    api.MapGet("/spots", async (
+        IDxSpotRepository spots,
+        int count = 20) =>
+    {
+        count = Math.Clamp(count, 1, 500);
+        var list = await spots.GetRecentAsync(count);
+        return Results.Ok(list);
+    });
+
+    // GET /api/users
+    api.MapGet("/users", (IConnectionManager connections) =>
+    {
+        var users = connections.GetConnectedUsers().Select(s => new
+        {
+            callsign  = s.Callsign,
+            name      = s.Name,
+            qth       = s.Qth,
+            grid      = s.Grid,
+            connectedAt = s.ConnectedAt,
+        });
+        return Results.Ok(users);
+    });
+
+    // GET /api/nodes
+    api.MapGet("/nodes", (INodeManager nodes) =>
+        Results.Ok(nodes.GetConnectedNodes()));
+
+    // GET /api/wwv[?count=N]
+    api.MapGet("/wwv", async (IWwvRepository wwv, int count = 5) =>
+    {
+        count = Math.Clamp(count, 1, 50);
+        var list = await wwv.GetRecentAsync(count);
+        return Results.Ok(list);
+    });
+
+    // GET /api/wx[?count=N]
+    api.MapGet("/wx", async (IWxRepository wx, int count = 5) =>
+    {
+        count = Math.Clamp(count, 1, 50);
+        var list = await wx.GetRecentAsync(count);
+        return Results.Ok(list);
+    });
+
+    // GET /api/stats
+    api.MapGet("/stats", async (
+        IConnectionManager connections,
+        INodeManager nodes,
+        IWebSocketClientRegistry wsClients,
+        IDxSpotRepository spots) =>
+    {
+        var spotCount = await spots.CountAsync();
+        return Results.Ok(new
+        {
+            connectedUsers      = connections.Count,
+            connectedNodes      = nodes.Count,
+            connectedWsClients  = wsClients.Count,
+            totalSpotsInDb      = spotCount,
+            serverTime          = DateTime.UtcNow.ToString("O"),
+        });
+    });
+
+    // ── Admin endpoints (require X-Admin-Key header) ──────────────────────
+    var admin = app.MapGroup("/api/admin");
+
+    // POST /api/admin/announce  { "message": "..." }
+    admin.MapPost("/announce", async (
+        HttpContext http,
+        IOptions<ApiOptions> apiOpts,
+        IConnectionManager connections,
+        IMessageDistributor distributor,
+        AdminAnnounceRequest req) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+        if (string.IsNullOrWhiteSpace(req.Message)) return Results.BadRequest("message required");
+
+        var text = $"To ALL de SYSOP   : {req.Message,-39} {DateTime.UtcNow:HHmm}Z\r\n";
+        var response = new OpenArcServer.Core.Commands.CommandResponse
+        {
+            DistroType = OpenArcServer.Core.DistroType.ToAll,
+        };
+        response.Messages.Add(text.TrimEnd('\r', '\n'));
+        // Broadcast via a dummy system session
+        var sysop = new OpenArcServer.Core.Sessions.UserSession
+        {
+            Callsign = "SYSOP",
+        };
+        await distributor.DistributeAsync(response, sysop, http.RequestAborted);
+        return Results.Ok(new { sent = true });
+    });
+
+    // DELETE /api/admin/users/{callsign}
+    admin.MapDelete("/users/{callsign}", (
+        HttpContext http,
+        IOptions<ApiOptions> apiOpts,
+        IConnectionManager connections,
+        string callsign) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+        var session = connections.FindByCallsign(callsign.ToUpperInvariant());
+        if (session is null) return Results.NotFound(new { error = $"{callsign} not connected" });
+        session.SendAsync?.Invoke("*** You have been disconnected by the sysop. ***\r\n", CancellationToken.None);
+        connections.RemoveSession(session.SessionId);
+        return Results.Ok(new { disconnected = callsign.ToUpperInvariant() });
+    });
 
     await app.RunAsync();
 }
@@ -235,3 +374,14 @@ finally
 }
 
 return 0;
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+static bool IsAdminAuthorized(HttpContext http, ApiOptions opts)
+{
+    if (string.IsNullOrEmpty(opts.AdminKey)) return false; // admin disabled unless key configured
+    http.Request.Headers.TryGetValue("X-Admin-Key", out var provided);
+    return provided == opts.AdminKey;
+}
+
+// ── Request DTOs ──────────────────────────────────────────────────────────
+record AdminAnnounceRequest(string Message);

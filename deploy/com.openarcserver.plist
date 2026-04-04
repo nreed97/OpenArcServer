@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.openarcserver</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/opt/openarcserver/OpenArcServer.Server</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/usr/local/opt/openarcserver</string>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/usr/local/var/log/openarcserver/stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/usr/local/var/log/openarcserver/stderr.log</string>
+
+  <!-- Override configuration via environment variables if needed -->
+  <!--
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>Server__NodeCallsign</key>
+    <string>W1AW-2</string>
+    <key>Api__AdminKey</key>
+    <string>changeme</string>
+  </dict>
+  -->
+</dict>
+</plist>

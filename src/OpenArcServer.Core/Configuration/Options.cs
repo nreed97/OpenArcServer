@@ -107,3 +107,16 @@ public sealed class ArxServerOptions
     public int Port { get; set; } = 3608;
     public string BindAddress { get; set; } = "0.0.0.0";
 }
+
+/// <summary>Options for the REST API / admin dashboard.</summary>
+public sealed class ApiOptions
+{
+    public bool Enabled { get; set; } = true;
+    public int Port { get; set; } = 8080;
+    public string BindAddress { get; set; } = "0.0.0.0";
+    /// <summary>
+    /// Optional API key for admin endpoints.  If empty, admin endpoints are disabled.
+    /// Set via environment variable OPENARCSERVER_ADMIN_KEY for production use.
+    /// </summary>
+    public string AdminKey { get; set; } = string.Empty;
+}

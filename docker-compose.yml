@@ -1,0 +1,41 @@
+services:
+  openarcserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: openarcserver:latest
+    container_name: openarcserver
+    restart: unless-stopped
+
+    ports:
+      - "7373:7373"   # Telnet DX cluster clients
+      - "3608:3608"   # ARx2 native AR-Cluster protocol
+      - "7300:7300"   # PCxx node-to-node peering
+      - "7374:7374"   # WebSocket (browser clients)
+      - "8080:8080"   # REST API + admin dashboard
+
+    volumes:
+      - openarcserver-data:/app/data
+      - openarcserver-logs:/app/logs
+
+    environment:
+      # Override any appsettings.json values via environment variables.
+      # Use double-underscore (__) as the section separator.
+      # Example: set the node callsign and admin API key at runtime.
+      - Server__NodeCallsign=${NODE_CALLSIGN:-N0CALL-2}
+      - Server__SysopCallsign=${SYSOP_CALLSIGN:-N0CALL}
+      # Set a strong admin key — leave empty to disable admin endpoints
+      - Api__AdminKey=${OPENARCSERVER_ADMIN_KEY:-}
+      # RBN callsign (your callsign for the RBN telnet feed)
+      - Rbn__Callsign=${RBN_CALLSIGN:-}
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  openarcserver-data:
+  openarcserver-logs:

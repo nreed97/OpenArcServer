@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenArcServer — Admin Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #0d1117;
+      --surface: #161b22;
+      --border:  #30363d;
+      --text:    #e6edf3;
+      --muted:   #8b949e;
+      --accent:  #58a6ff;
+      --green:   #3fb950;
+      --yellow:  #d29922;
+      --red:     #f85149;
+      --orange:  #e8a16c;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5;
+    }
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 12px 24px; display: flex; align-items: center; gap: 16px;
+    }
+    header h1 { font-size: 18px; font-weight: 600; color: var(--accent); }
+    header .tag { font-size: 12px; color: var(--muted); }
+    #status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--red); margin-left: auto; }
+    #status-dot.live { background: var(--green); }
+    #status-label { font-size: 12px; color: var(--muted); }
+
+    nav { display: flex; gap: 2px; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; }
+    nav button {
+      background: none; border: none; color: var(--muted); padding: 10px 16px;
+      cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+    nav button:hover { color: var(--text); }
+    nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    main { padding: 20px 24px; }
+    .tab { display: none; }
+    .tab.active { display: block; }
+
+    /* Stats row */
+    .stats-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+      padding: 14px 20px; min-width: 140px; flex: 1;
+    }
+    .stat-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .stat-card .value { font-size: 28px; font-weight: 700; color: var(--accent); margin-top: 4px; }
+
+    /* Tables */
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .section-header h2 { font-size: 15px; font-weight: 600; }
+    .refresh-btn {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 12px;
+    }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    th { text-align: left; padding: 8px 12px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--border); background: #0d1117; }
+    td { padding: 7px 12px; border-bottom: 1px solid #21262d; font-size: 13px; font-family: "SFMono-Regular", Consolas, monospace; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #1c2128; }
+    .badge { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+    .badge-cw   { background: #1a3a1a; color: var(--green); }
+    .badge-ssb  { background: #1a2a3a; color: var(--accent); }
+    .badge-ft8  { background: #2a2a1a; color: var(--yellow); }
+    .badge-digi { background: #2a1a2a; color: #c9b1ff; }
+    .badge-other{ background: #2a1a1a; color: var(--orange); }
+
+    /* Live feed */
+    #feed-box {
+      background: #010409; border: 1px solid var(--border); border-radius: 6px;
+      height: 420px; overflow-y: auto; font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px; padding: 10px; color: #79c0ff;
+    }
+    #feed-box .feed-line { padding: 1px 0; white-space: pre; }
+    #feed-box .feed-line.spot { color: #79c0ff; }
+    #feed-box .feed-line.ann  { color: var(--yellow); }
+    #feed-box .feed-line.sys  { color: var(--muted); }
+
+    /* Admin panel */
+    .admin-form { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 20px; margin-bottom: 20px; }
+    .admin-form h3 { font-size: 14px; font-weight: 600; margin-bottom: 14px; }
+    .form-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+    .form-row label { min-width: 90px; font-size: 12px; color: var(--muted); }
+    .form-row input, .form-row textarea {
+      flex: 1; background: #010409; border: 1px solid var(--border); border-radius: 4px;
+      color: var(--text); padding: 6px 10px; font-size: 13px; font-family: inherit;
+      min-width: 200px;
+    }
+    .form-row input:focus, .form-row textarea:focus { outline: none; border-color: var(--accent); }
+    .btn { background: var(--accent); color: #000; border: none; border-radius: 4px; padding: 6px 16px; cursor: pointer; font-weight: 600; font-size: 13px; }
+    .btn:hover { opacity: .85; }
+    .btn-danger { background: var(--red); color: #fff; }
+    #admin-result { margin-top: 10px; font-size: 12px; color: var(--green); }
+
+    .empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
+
+    /* Propagation */
+    .prop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+    .prop-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 14px; }
+    .prop-card .meta { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+    .prop-card .vals { display: flex; gap: 16px; flex-wrap: wrap; }
+    .prop-val .pkey { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+    .prop-val .pval { font-size: 20px; font-weight: 700; color: var(--accent); }
+    .prop-card .forecast { margin-top: 8px; font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>OpenArcServer</h1>
+  <span class="tag">Admin Dashboard</span>
+  <div id="status-dot"></div>
+  <span id="status-label">Disconnected</span>
+</header>
+
+<nav>
+  <button class="active" onclick="showTab('dashboard')">Dashboard</button>
+  <button onclick="showTab('spots')">DX Spots</button>
+  <button onclick="showTab('users')">Users</button>
+  <button onclick="showTab('nodes')">Nodes</button>
+  <button onclick="showTab('propagation')">Propagation</button>
+  <button onclick="showTab('live')">Live Feed</button>
+  <button onclick="showTab('admin')">Admin</button>
+</nav>
+
+<main>
+
+  <!-- Dashboard -->
+  <div id="tab-dashboard" class="tab active">
+    <div class="stats-row" id="stats-row">
+      <div class="stat-card"><div class="label">Connected Users</div><div class="value" id="stat-users">—</div></div>
+      <div class="stat-card"><div class="label">Connected Nodes</div><div class="value" id="stat-nodes">—</div></div>
+      <div class="stat-card"><div class="label">WS Clients</div><div class="value" id="stat-ws">—</div></div>
+      <div class="stat-card"><div class="label">Spots in DB</div><div class="value" id="stat-spots">—</div></div>
+      <div class="stat-card"><div class="label">Server Time</div><div class="value" id="stat-time" style="font-size:16px">—</div></div>
+    </div>
+    <div class="section-header"><h2>Recent DX Spots</h2><button class="refresh-btn" onclick="loadSpots()">Refresh</button></div>
+    <div id="dash-spots-container"></div>
+  </div>
+
+  <!-- DX Spots -->
+  <div id="tab-spots" class="tab">
+    <div class="section-header">
+      <h2>DX Spots</h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="spots-count" type="number" value="50" min="1" max="500" style="width:70px;background:#010409;border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-size:13px">
+        <button class="refresh-btn" onclick="loadSpots(true)">Load</button>
+      </div>
+    </div>
+    <div id="spots-container"></div>
+  </div>
+
+  <!-- Users -->
+  <div id="tab-users" class="tab">
+    <div class="section-header"><h2>Connected Users</h2><button class="refresh-btn" onclick="loadUsers()">Refresh</button></div>
+    <div id="users-container"></div>
+  </div>
+
+  <!-- Nodes -->
+  <div id="tab-nodes" class="tab">
+    <div class="section-header"><h2>Connected Nodes</h2><button class="refresh-btn" onclick="loadNodes()">Refresh</button></div>
+    <div id="nodes-container"></div>
+  </div>
+
+  <!-- Propagation -->
+  <div id="tab-propagation" class="tab">
+    <div class="section-header"><h2>WWV Reports</h2><button class="refresh-btn" onclick="loadProp()">Refresh</button></div>
+    <div class="prop-grid" id="wwv-grid"></div>
+    <div class="section-header" style="margin-top:20px"><h2>WX Reports</h2></div>
+    <div id="wx-container"></div>
+  </div>
+
+  <!-- Live Feed -->
+  <div id="tab-live" class="tab">
+    <div class="section-header">
+      <h2>Live DX Feed</h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="feed-count" style="font-size:12px;color:var(--muted)">0 spots</span>
+        <button class="refresh-btn" onclick="clearFeed()">Clear</button>
+      </div>
+    </div>
+    <div id="feed-box"></div>
+  </div>
+
+  <!-- Admin -->
+  <div id="tab-admin" class="tab">
+    <div class="admin-form">
+      <h3>Authentication</h3>
+      <div class="form-row">
+        <label>Admin Key</label>
+        <input type="password" id="admin-key" placeholder="Set AdminKey in appsettings.json" />
+      </div>
+    </div>
+
+    <div class="admin-form">
+      <h3>Broadcast Announcement</h3>
+      <div class="form-row">
+        <label>Message</label>
+        <input type="text" id="ann-msg" placeholder="Message to broadcast to all connected users" maxlength="200" />
+      </div>
+      <button class="btn" onclick="sendAnnouncement()">Send Announcement</button>
+    </div>
+
+    <div class="admin-form">
+      <h3>Disconnect User</h3>
+      <div class="form-row">
+        <label>Callsign</label>
+        <input type="text" id="kick-call" placeholder="W1AW" style="text-transform:uppercase" />
+      </div>
+      <button class="btn btn-danger" onclick="kickUser()">Disconnect</button>
+    </div>
+
+    <div id="admin-result"></div>
+  </div>
+
+</main>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────
+const API_BASE = `${location.protocol}//${location.hostname}:${location.port}`;
+// WebSocket connects to the cluster WS port (default 7374)
+const WS_PORT  = 7374;
+
+// ── Tab navigation ────────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'dashboard') { loadStats(); loadSpots(); }
+  if (name === 'spots')     loadSpots(true);
+  if (name === 'users')     loadUsers();
+  if (name === 'nodes')     loadNodes();
+  if (name === 'propagation') loadProp();
+}
+
+// ── API helpers ───────────────────────────────────────────────────────────
+async function apiFetch(path) {
+  try {
+    const r = await fetch(API_BASE + path);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
+async function apiAdmin(method, path, body) {
+  const key = document.getElementById('admin-key').value;
+  try {
+    const r = await fetch(API_BASE + path, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return await r.json();
+  } catch(e) { return { error: String(e) }; }
+}
+
+function setResult(msg, ok = true) {
+  const el = document.getElementById('admin-result');
+  el.style.color = ok ? 'var(--green)' : 'var(--red)';
+  el.textContent = msg;
+  setTimeout(() => el.textContent = '', 5000);
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────
+async function loadStats() {
+  const d = await apiFetch('/api/stats');
+  if (!d) return;
+  document.getElementById('stat-users').textContent = d.connectedUsers;
+  document.getElementById('stat-nodes').textContent = d.connectedNodes;
+  document.getElementById('stat-ws').textContent    = d.connectedWsClients;
+  document.getElementById('stat-spots').textContent = d.totalSpotsInDb.toLocaleString();
+  document.getElementById('stat-time').textContent  = d.serverTime ? d.serverTime.substring(11,19) + 'Z' : '—';
+}
+
+// ── Spots table ───────────────────────────────────────────────────────────
+function modeBadge(mode) {
+  if (!mode) return '';
+  const m = mode.toUpperCase();
+  let cls = 'other';
+  if (m === 'CW')  cls = 'cw';
+  else if (m === 'SSB' || m === 'LSB' || m === 'USB') cls = 'ssb';
+  else if (m === 'FT8' || m === 'FT4') cls = 'ft8';
+  else if (m.includes('RTTY') || m.includes('PSK') || m.includes('JS8')) cls = 'digi';
+  return `<span class="badge badge-${cls}">${mode}</span>`;
+}
+
+function buildSpotsTable(spots) {
+  if (!spots || spots.length === 0) return '<div class="empty">No spots found</div>';
+  return `<table>
+    <thead><tr><th>Time</th><th>DX Call</th><th>Freq (kHz)</th><th>Band</th><th>Mode</th><th>Spotter</th><th>Comment</th><th>DXCC</th></tr></thead>
+    <tbody>
+    ${spots.map(s => `<tr>
+      <td>${fmtTime(s.timestamp)}</td>
+      <td style="color:var(--accent);font-weight:600">${s.call}</td>
+      <td>${s.freq ? s.freq.toFixed(1) : '—'}</td>
+      <td>${s.band || '—'}</td>
+      <td>${modeBadge(s.mode)}</td>
+      <td>${s.spotter || '—'}</td>
+      <td style="color:var(--muted)">${s.comment || ''}</td>
+      <td>${s.cont || '—'}</td>
+    </tr>`).join('')}
+    </tbody></table>`;
+}
+
+async function loadSpots(full) {
+  const count = full
+    ? parseInt(document.getElementById('spots-count')?.value || 50)
+    : 10;
+  const spots = await apiFetch(`/api/spots?count=${count}`);
+  const html = buildSpotsTable(spots);
+  if (full) document.getElementById('spots-container').innerHTML = html;
+  else       document.getElementById('dash-spots-container').innerHTML = html;
+}
+
+// ── Users ─────────────────────────────────────────────────────────────────
+async function loadUsers() {
+  const users = await apiFetch('/api/users');
+  const el = document.getElementById('users-container');
+  if (!users || users.length === 0) { el.innerHTML = '<div class="empty">No users connected</div>'; return; }
+  el.innerHTML = `<table>
+    <thead><tr><th>Callsign</th><th>Name</th><th>QTH</th><th>Grid</th><th>Connected</th></tr></thead>
+    <tbody>
+    ${users.map(u => `<tr>
+      <td style="color:var(--accent);font-weight:600">${u.callsign}</td>
+      <td>${u.name || '—'}</td>
+      <td>${u.qth  || '—'}</td>
+      <td>${u.grid || '—'}</td>
+      <td>${fmtTime(u.connectedAt)}</td>
+    </tr>`).join('')}
+    </tbody></table>`;
+}
+
+// ── Nodes ─────────────────────────────────────────────────────────────────
+async function loadNodes() {
+  const nodes = await apiFetch('/api/nodes');
+  const el = document.getElementById('nodes-container');
+  if (!nodes || nodes.length === 0) { el.innerHTML = '<div class="empty">No nodes connected</div>'; return; }
+  el.innerHTML = `<table>
+    <thead><tr><th>Callsign</th><th>Software</th><th>Version</th><th>Connected</th></tr></thead>
+    <tbody>
+    ${nodes.map(n => `<tr>
+      <td style="color:var(--accent);font-weight:600">${n.callsign}</td>
+      <td>${n.software || '—'}</td>
+      <td>${n.version  || '—'}</td>
+      <td>${fmtTime(n.connectedAt)}</td>
+    </tr>`).join('')}
+    </tbody></table>`;
+}
+
+// ── Propagation ───────────────────────────────────────────────────────────
+async function loadProp() {
+  const [wwv, wx] = await Promise.all([apiFetch('/api/wwv?count=5'), apiFetch('/api/wx?count=5')]);
+  const wwvEl = document.getElementById('wwv-grid');
+  if (!wwv || wwv.length === 0) wwvEl.innerHTML = '<div class="empty">No WWV reports</div>';
+  else wwvEl.innerHTML = wwv.map(w => `
+    <div class="prop-card">
+      <div class="meta">${w.spotter} — ${fmtDate(w.timestamp)}</div>
+      <div class="vals">
+        <div class="prop-val"><div class="pkey">SFI</div><div class="pval">${w.sfi}</div></div>
+        <div class="prop-val"><div class="pkey">A</div><div class="pval">${w.a}</div></div>
+        <div class="prop-val"><div class="pkey">K</div><div class="pval">${w.k}</div></div>
+      </div>
+      ${w.forecast ? `<div class="forecast">${w.forecast}</div>` : ''}
+    </div>`).join('');
+
+  const wxEl = document.getElementById('wx-container');
+  if (!wx || wx.length === 0) wxEl.innerHTML = '<div class="empty">No WX reports</div>';
+  else wxEl.innerHTML = `<table>
+    <thead><tr><th>Time</th><th>Callsign</th><th>Report</th></tr></thead>
+    <tbody>
+    ${wx.map(w => `<tr>
+      <td>${fmtTime(w.timestamp)}</td>
+      <td style="color:var(--accent)">${w.spotter}</td>
+      <td>${w.message}</td>
+    </tr>`).join('')}
+    </tbody></table>`;
+}
+
+// ── Live Feed via WebSocket ───────────────────────────────────────────────
+let ws = null, feedCount = 0;
+
+function connectFeed() {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+  const host = location.hostname;
+  ws = new WebSocket(`ws://${host}:${WS_PORT}/ws/`);
+
+  ws.onopen = () => {
+    // Send a guest login so the server accepts the connection
+    ws.send(JSON.stringify({ type: 'auth', callsign: 'DASHBOARD' }));
+    document.getElementById('status-dot').classList.add('live');
+    document.getElementById('status-label').textContent = 'Connected';
+  };
+  ws.onclose = () => {
+    document.getElementById('status-dot').classList.remove('live');
+    document.getElementById('status-label').textContent = 'Disconnected';
+    setTimeout(connectFeed, 5000);
+  };
+  ws.onerror = () => ws.close();
+  ws.onmessage = e => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'dx_spot') appendFeedLine(formatSpot(msg), 'spot');
+      else if (msg.type === 'announcement') appendFeedLine(msg.text || JSON.stringify(msg), 'ann');
+      else appendFeedLine(e.data, 'sys');
+    } catch {
+      appendFeedLine(e.data, 'sys');
+    }
+  };
+}
+
+function appendFeedLine(text, cls) {
+  const box = document.getElementById('feed-box');
+  const line = document.createElement('div');
+  line.className = `feed-line ${cls}`;
+  line.textContent = text;
+  box.appendChild(line);
+  // Keep last 500 lines
+  while (box.children.length > 500) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+  feedCount++;
+  document.getElementById('feed-count').textContent = `${feedCount} spots`;
+}
+
+function formatSpot(s) {
+  const call    = (s.call    || '').padEnd(12);
+  const spotter = (s.spotter || '').padEnd(10);
+  const freq    = s.freq ? s.freq.toFixed(1).padStart(9) : '        —';
+  const comment = (s.comment || '').padEnd(30);
+  const ts      = s.timestamp ? s.timestamp.substring(11,16) + 'Z' : '     ';
+  return `DX de ${spotter}: ${freq}  ${call} ${comment} ${ts}`;
+}
+
+function clearFeed() {
+  document.getElementById('feed-box').innerHTML = '';
+  feedCount = 0;
+  document.getElementById('feed-count').textContent = '0 spots';
+}
+
+// ── Admin actions ─────────────────────────────────────────────────────────
+async function sendAnnouncement() {
+  const msg = document.getElementById('ann-msg').value.trim();
+  if (!msg) { setResult('Enter a message', false); return; }
+  const r = await apiAdmin('POST', '/api/admin/announce', { message: msg });
+  if (r && r.sent) { setResult('Announcement sent'); document.getElementById('ann-msg').value = ''; }
+  else setResult('Failed: ' + (r?.error || r?.title || 'unknown error'), false);
+}
+
+async function kickUser() {
+  const call = document.getElementById('kick-call').value.trim().toUpperCase();
+  if (!call) { setResult('Enter a callsign', false); return; }
+  const r = await apiAdmin('DELETE', `/api/admin/users/${call}`);
+  if (r && r.disconnected) { setResult(`${r.disconnected} disconnected`); document.getElementById('kick-call').value = ''; }
+  else setResult('Failed: ' + (r?.error || r?.title || 'unknown error'), false);
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────
+function fmtTime(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toISOString().substring(11, 19) + 'Z'; } catch { return iso; }
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toISOString().substring(0, 16).replace('T', ' ') + 'Z'; } catch { return iso; }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+loadStats();
+loadSpots();
+connectFeed();
+setInterval(loadStats, 15000);
+</script>
+</body>
+</html>

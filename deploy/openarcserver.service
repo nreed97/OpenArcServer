@@ -1,0 +1,29 @@
+[Unit]
+Description=OpenArcServer DX Cluster Server
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+# Change User/Group to a dedicated service account for production
+User=openarcserver
+Group=openarcserver
+WorkingDirectory=/opt/openarcserver
+ExecStart=/opt/openarcserver/OpenArcServer.Server
+Restart=on-failure
+RestartSec=10s
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Optionally override settings without editing appsettings.json
+# Environment=Server__NodeCallsign=W1AW-2
+# Environment=Api__AdminKey=changeme
+# Environment=Rbn__Callsign=W1AW
+
+# Hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
