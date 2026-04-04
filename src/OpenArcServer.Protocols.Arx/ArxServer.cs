@@ -7,37 +7,41 @@ using Microsoft.Extensions.Options;
 using OpenArcServer.Core.Configuration;
 using OpenArcServer.Core.Services;
 
-namespace OpenArcServer.Protocols.Telnet;
+namespace OpenArcServer.Protocols.Arx;
 
-public sealed class TelnetServer : BackgroundService
+/// <summary>
+/// TCP listener for AR-Cluster native (ARx2) client connections on port 3608.
+/// Each accepted connection is handed to ArxClientConnection for the login handshake
+/// and spot-push lifecycle.
+/// </summary>
+public sealed class ArxServer : BackgroundService
 {
-    private readonly TelnetOptions _opts;
+    private readonly ArxServerOptions _opts;
     private readonly IServiceProvider _services;
-    private readonly ILogger<TelnetServer> _log;
+    private readonly ILogger<ArxServer> _log;
 
-    public TelnetServer(
-        IOptions<TelnetOptions> opts,
+    public ArxServer(
+        IOptions<ArxServerOptions> opts,
         IServiceProvider services,
-        ILogger<TelnetServer> log)
+        ILogger<ArxServer> log)
     {
-        _opts = opts.Value;
+        _opts     = opts.Value;
         _services = services;
-        _log = log;
+        _log      = log;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!_opts.Enabled)
         {
-            _log.LogInformation("Telnet server is disabled");
+            _log.LogInformation("ARx2 server is disabled");
             return;
         }
 
         var bindAddress = IPAddress.Parse(_opts.BindAddress);
         var listener = new TcpListener(bindAddress, _opts.Port);
         listener.Start();
-
-        _log.LogInformation("Telnet server listening on {Address}:{Port}", _opts.BindAddress, _opts.Port);
+        _log.LogInformation("ARx2 server listening on {Address}:{Port}", _opts.BindAddress, _opts.Port);
 
         try
         {
@@ -48,13 +52,10 @@ public sealed class TelnetServer : BackgroundService
                 {
                     client = await listener.AcceptTcpClientAsync(stoppingToken);
                 }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
+                catch (OperationCanceledException) { break; }
                 catch (Exception ex)
                 {
-                    _log.LogError(ex, "Error accepting connection");
+                    _log.LogError(ex, "ARx2 server: error accepting connection");
                     continue;
                 }
 
@@ -64,26 +65,20 @@ public sealed class TelnetServer : BackgroundService
                     using var scope = _services.CreateScope();
                     var sp = scope.ServiceProvider;
 
-                    var connection = new TelnetClientConnection(
+                    var conn = new ArxClientConnection(
                         capturedClient,
-                        sp.GetRequiredService<IConnectionManager>(),
-                        sp.GetRequiredService<ICommandRouter>(),
-                        sp.GetRequiredService<IMessageDistributor>(),
-                        sp.GetRequiredService<IUserRepository>(),
-                        sp.GetRequiredKeyedService<IFilterList>("connectblock"),
-                        sp.GetRequiredService<IArxMessageProcessor>(),
-                        sp.GetRequiredService<IOptions<TelnetOptions>>(),
+                        sp.GetRequiredService<IArxClientRegistry>(),
                         sp.GetRequiredService<IOptions<ServerOptions>>(),
-                        sp.GetRequiredService<ILogger<TelnetClientConnection>>());
+                        sp.GetRequiredService<ILogger<ArxClientConnection>>());
 
-                    await connection.HandleAsync(stoppingToken);
+                    await conn.HandleAsync(stoppingToken);
                 }, stoppingToken);
             }
         }
         finally
         {
             listener.Stop();
-            _log.LogInformation("Telnet server stopped");
+            _log.LogInformation("ARx2 server stopped");
         }
     }
 }

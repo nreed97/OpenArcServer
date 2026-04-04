@@ -12,7 +12,7 @@ Built through protocol analysis and compatibility research of the AR-Cluster Ser
 
 **Phase 2 complete — PCxx node peering, ARx2 native client support, and RBN integration all working.**
 
-The server accepts telnet connections on port 7373, the AR-Cluster native ARx2 client protocol on the same port (detected transparently mid-connection after plain-text login), and inbound PCxx node connections on port 7300 for peering with DX Spider, CC Cluster, and other PCxx-compatible cluster nodes.
+The server accepts telnet connections on port 7373, the AR-Cluster native ARx2 client protocol on port 3608 (confirmed from Wireshark captures of real K1TTT traffic), and inbound PCxx node connections on port 7300 for peering with DX Spider, CC Cluster, and other PCxx-compatible cluster nodes.
 
 ```
 AR-Cluster Server
@@ -173,21 +173,46 @@ Outbound: add entries to `Peers` and OpenArcServer will connect and maintain the
 
 ### ARx2 Native Client Protocol
 
-The original AR-Cluster client (ArClient) uses a hybrid connection model on port 7373 — no separate port needed:
+The original AR-Cluster client (ArClient) uses **two separate TCP connections** simultaneously:
 
-1. **Plain-text telnet login** — same prompt/callsign flow as any telnet client
-2. **ARx2 frames** — after login the client switches to sending zlib-compressed XML framed with `[Arx2]...[/Arx2]` delimiters
+| Port | Protocol | Direction | Description |
+|------|----------|-----------|-------------|
+| 7373 | Plain-text telnet | Both | Standard DX cluster: login, spot posting, spot display |
+| 3608 | ARx2 native (XML) | Server → Client push | Receives DX spots in real-time as structured XML |
 
-OpenArcServer handles this transparently: `TelnetClientConnection` handles the plain-text login, then detects the `[Arx2]` frame marker mid-stream and automatically flips the session to ARx2 framing mode for both sending and receiving. No separate port or configuration is needed.
+**Architecture (confirmed from Wireshark captures of K1TTT AR-Cluster Server):**
+
+1. Client opens **port 7373** — standard telnet login (`callsign:` prompt, plain-text `DX de ...` spot display), also accepts `AB5K_Client_DxSpot` ARx2 XML frames for posting
+2. Client opens **port 3608** — server-initiated ARx2 login handshake, then server pushes `AB5K_Client_Dx` XML frames for each DX spot
+
+**ARx2 login handshake (port 3608):**
+```
+Server → Client: <AB5K_LoginRqst><Call>K1TTT</Call><Message>Connection Registered</Message><Type>ArcNode</Type></AB5K_LoginRqst>
+Client → Server: <AB5K_LoginResp><Call>W0NYY</Call><Message>Connection Response</Message><Type>ArcUser</Type></AB5K_LoginResp>
+```
 
 **Wire format:** `[Arx2]{zlib-compressed UTF-8 XML}[/Arx2]`
 
-**Confirmed ARx2 message types (post-login):**
+**Confirmed ARx2 message types:**
 
-| Direction | XML root element | Description |
-|-----------|-----------------|-------------|
-| Client → Server | `AB5K_Client_DxSpot` | Post a DX spot |
-| Server → Client | `AB5K_Server_DxSpot` | Broadcast DX spot |
+| Port | Direction | XML root element | Description |
+|------|-----------|-----------------|-------------|
+| 3608 | Server → Client | `AB5K_LoginRqst` | Server announces itself on connect |
+| 3608 | Client → Server | `AB5K_LoginResp` | Client provides callsign |
+| 3608 | Server → Client | `AB5K_Client_Dx` | DX spot broadcast (35-field XML) |
+| 7373 | Client → Server | `AB5K_Client_DxSpot` | Post a DX spot |
+
+**Enable ARx2 server** in `appsettings.json`:
+
+```json
+{
+  "Arx": {
+    "Enabled": true,
+    "Port": 3608,
+    "BindAddress": "0.0.0.0"
+  }
+}
+```
 
 Any unrecognised message type is logged in full (XML text) so new types can be identified and added as discovered.
 
@@ -218,6 +243,7 @@ src/
   OpenArcServer.Engine/            # Commands, routing, distribution, spot pipeline
   OpenArcServer.Protocols.Telnet/  # TCP server, connection handler, login state machine
   OpenArcServer.Protocols.Pcxx/    # PCxx node-to-node protocol server
+  OpenArcServer.Protocols.Arx/     # ARx2 native client protocol server (port 3608)
   OpenArcServer.Server/            # Generic Host, DI wiring, appsettings.json
 tests/
   OpenArcServer.Engine.Tests/

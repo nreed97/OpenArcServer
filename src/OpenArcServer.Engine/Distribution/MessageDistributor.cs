@@ -82,10 +82,7 @@ public sealed class MessageDistributor : IMessageDistributor
 
     private async Task SendToAllUsersAsync(string text, CancellationToken ct)
     {
-        // Exclude ARx2 clients — they receive spot broadcasts as AB5K_Server_DxSpot
-        // XML via SendToAllArxClientsAsync, not as plain text.
-        var sessions = _connections.GetConnectedUsers()
-            .Where(s => s.ConnectType != Core.ConnectStateType.ArxClient);
+        var sessions = _connections.GetConnectedUsers();
         await Task.WhenAll(sessions.Select(s => SendToSessionAsync(s, text, ct)));
     }
 

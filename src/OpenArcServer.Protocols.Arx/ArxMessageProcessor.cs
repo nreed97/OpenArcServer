@@ -18,7 +18,6 @@ namespace OpenArcServer.Protocols.Arx;
 /// </summary>
 public sealed class ArxMessageProcessor : IArxMessageProcessor
 {
-    private readonly IArxClientRegistry _arxRegistry;
     private readonly IMessageDistributor _distributor;
     private readonly IDxSpotRepository _spots;
     private readonly ICtyLookup _cty;
@@ -28,7 +27,6 @@ public sealed class ArxMessageProcessor : IArxMessageProcessor
     private readonly ILogger<ArxMessageProcessor> _log;
 
     public ArxMessageProcessor(
-        IArxClientRegistry arxRegistry,
         IMessageDistributor distributor,
         IDxSpotRepository spots,
         ICtyLookup cty,
@@ -37,7 +35,6 @@ public sealed class ArxMessageProcessor : IArxMessageProcessor
         IOptions<SpotProcessingOptions> spotOpts,
         ILogger<ArxMessageProcessor> log)
     {
-        _arxRegistry = arxRegistry;
         _distributor  = distributor;
         _spots        = spots;
         _cty          = cty;
@@ -139,7 +136,7 @@ public sealed class ArxMessageProcessor : IArxMessageProcessor
             {
                 DistroType = DistroType.ToAll,
                 MsgType    = MsgType.Dx,
-                ArxMessage = DxSpotFormatter.FormatArxServerDxSpot(spot),
+                ArxMessage = DxSpotFormatter.FormatArxClientDx(spot),
                 PcxxMessage = DxSpotFormatter.FormatPc11(spot, spotter),
             };
             response.Messages.Add(DxSpotFormatter.Format(spot));

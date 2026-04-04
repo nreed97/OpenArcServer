@@ -88,3 +88,15 @@ public sealed class RbnOptions
     public string Callsign { get; set; } = string.Empty;
     public int ReconnectDelaySeconds { get; set; } = 30;
 }
+
+/// <summary>
+/// Options for the ARx2 native client server (AB5K AR-Cluster native protocol).
+/// Listens on a separate port (default 3608). Server sends AB5K_LoginRqst on connect;
+/// client responds AB5K_LoginResp; then server pushes AB5K_Client_Dx spots as ARx2 frames.
+/// </summary>
+public sealed class ArxServerOptions
+{
+    public bool Enabled { get; set; } = false;
+    public int Port { get; set; } = 3608;
+    public string BindAddress { get; set; } = "0.0.0.0";
+}

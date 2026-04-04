@@ -42,6 +42,7 @@ try
     builder.Services.Configure<SpotProcessingOptions>(builder.Configuration.GetSection("SpotProcessing"));
     builder.Services.Configure<PcxxOptions>(builder.Configuration.GetSection("Pcxx"));
     builder.Services.Configure<RbnOptions>(builder.Configuration.GetSection("Rbn"));
+    builder.Services.Configure<ArxServerOptions>(builder.Configuration.GetSection("Arx"));
 
     // Data layer
     builder.Services.AddSingleton<DatabaseInitializer>();
@@ -124,6 +125,9 @@ try
 
     // Telnet server
     builder.Services.AddHostedService<TelnetServer>();
+
+    // ARx2 native client server (port 3608)
+    builder.Services.AddHostedService<ArxServer>();
 
     // PCxx node server (inbound) + outbound connector + RBN
     builder.Services.AddHostedService<PcxxServer>();

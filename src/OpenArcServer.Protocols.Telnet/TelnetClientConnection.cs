@@ -21,17 +21,12 @@ public sealed class TelnetClientConnection
     private readonly IMessageDistributor _distributor;
     private readonly IUserRepository _users;
     private readonly IFilterList _connectBlock;
-    private readonly IArxClientRegistry _arxRegistry;
     private readonly IArxMessageProcessor _arxProcessor;
     private readonly TelnetOptions _opts;
     private readonly ServerOptions _serverOpts;
     private readonly ILogger<TelnetClientConnection> _log;
 
     private static readonly Encoding _enc = Encoding.UTF8;
-
-    // Set to true once the first [Arx2] frame arrives; flips SendAsync to ARx2 mode
-    private bool _isArxClient;
-    private NetworkStream? _stream;
 
     public TelnetClientConnection(
         TcpClient client,
@@ -40,7 +35,6 @@ public sealed class TelnetClientConnection
         IMessageDistributor distributor,
         IUserRepository users,
         IFilterList connectBlock,
-        IArxClientRegistry arxRegistry,
         IArxMessageProcessor arxProcessor,
         IOptions<TelnetOptions> opts,
         IOptions<ServerOptions> serverOpts,
@@ -52,7 +46,6 @@ public sealed class TelnetClientConnection
         _distributor  = distributor;
         _users        = users;
         _connectBlock = connectBlock;
-        _arxRegistry  = arxRegistry;
         _arxProcessor = arxProcessor;
         _opts         = opts.Value;
         _serverOpts   = serverOpts.Value;
@@ -70,14 +63,13 @@ public sealed class TelnetClientConnection
             ConnectionState = ConnectionState.Idle,
         };
 
-        _stream = _client.GetStream();
+        var stream = _client.GetStream();
         var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        // Default SendAsync — plain UTF-8 text (used for telnet and the initial login)
         session.SendAsync = async (text, token) =>
         {
             var bytes = _enc.GetBytes(text);
-            await _stream.WriteAsync(bytes, token);
+            await stream.WriteAsync(bytes, token);
         };
 
         session.DisconnectAsync = async () =>
@@ -87,7 +79,7 @@ public sealed class TelnetClientConnection
 
         var pipe = new Pipe();
 
-        var writing = FillPipeAsync(_stream, pipe.Writer, cts.Token);
+        var writing = FillPipeAsync(stream, pipe.Writer, cts.Token);
         var reading = ReadPipeAsync(pipe.Reader, session, cts.Token);
 
         try
@@ -104,9 +96,6 @@ public sealed class TelnetClientConnection
         }
         finally
         {
-            if (_isArxClient)
-                _arxRegistry.Remove(session.SessionId);
-
             if (!string.IsNullOrEmpty(session.Callsign))
             {
                 _connections.RemoveSession(session.SessionId);
@@ -169,7 +158,7 @@ public sealed class TelnetClientConnection
             {
                 progress = false;
 
-                // Check for [Arx2] frame (may arrive after login for ArClient)
+                // Check for [Arx2] frame (AR-Cluster client may post spots via ARx2 on port 7373)
                 if (TryPeekArxFrame(buffer))
                 {
                     var bytes = buffer.ToArray();
@@ -180,7 +169,7 @@ public sealed class TelnetClientConnection
                         buffer   = buffer.Slice(arxConsumed);
                         consumed = buffer.Start;
                         progress = true;
-                        await ProcessArxFrameAsync(session, xml, ct);
+                        await _arxProcessor.ProcessAsync(session, xml, ct);
                         continue;
                     }
 
@@ -213,31 +202,6 @@ public sealed class TelnetClientConnection
         return ArxFrame.StartsWithFrame(peek);
     }
 
-    // ── ARx2 frame processing ─────────────────────────────────────────────
-
-    private async Task ProcessArxFrameAsync(UserSession session, string xml, CancellationToken ct)
-    {
-        if (!_isArxClient)
-        {
-            _isArxClient           = true;
-            session.ConnectType    = ConnectStateType.ArxClient;
-
-            // Flip SendAsync to ARx2-framed mode for spot broadcasts
-            var stream = _stream!;
-            session.SendAsync = async (data, token) =>
-            {
-                var bytes = ArxFrame.Wrap(data);
-                await stream.WriteAsync(bytes, token);
-            };
-
-            _arxRegistry.Add(session);
-            _log.LogInformation("ARx2 mode activated for {Callsign} from {Endpoint}",
-                session.Callsign, session.RemoteEndpoint);
-        }
-
-        await _arxProcessor.ProcessAsync(session, xml, ct);
-    }
-
     // ── Plain-text line reading ───────────────────────────────────────────
 
     private static bool TryReadLine(ref ReadOnlySequence<byte> buffer, out string line)
@@ -253,9 +217,6 @@ public sealed class TelnetClientConnection
                 len--;
 
             // Strip telnet IAC sequences (RFC 854) and ASCII control characters.
-            // IAC (0xFF) introduces a 2-byte command or 3-byte command+option sequence.
-            // Telnet clients send these negotiation bytes even to servers that ignore them,
-            // and they arrive mixed in with user input if not filtered here.
             int cleanLen = 0;
             int i = 0;
             while (i < len)
@@ -266,18 +227,17 @@ public sealed class TelnetClientConnection
                     i++;
                     if (i < len)
                     {
-                        byte cmd = bytes[i++]; // command byte
-                        // WILL(251)/WONT(252)/DO(253)/DONT(254) are followed by an option byte
+                        byte cmd = bytes[i++];
                         if (cmd >= 251 && cmd <= 254 && i < len)
-                            i++; // skip option byte
+                            i++; // skip option byte for WILL/WONT/DO/DONT
                     }
                 }
-                else if (b >= 32) // Printable ASCII or UTF-8 multi-byte continuation
+                else if (b >= 32)
                 {
                     bytes[cleanLen++] = b;
                     i++;
                 }
-                else // Control character < 32 (NUL, BS, etc.) — discard
+                else
                 {
                     i++;
                 }

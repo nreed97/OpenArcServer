@@ -40,27 +40,60 @@ public static class DxSpotFormatter
     }
 
     /// <summary>
-    /// Build an ARx2 AB5K_Server_DxSpot XML message for broadcast to native ARx2 clients.
+    /// Build an ARx2 AB5K_Client_Dx XML message for broadcast to native ARx2 clients on port 3608.
+    /// Field names and structure confirmed from Wireshark capture of K1TTT AR-Cluster Server.
     /// Returns just the XML string — ArxFrame.Wrap() handles framing/compression.
     /// </summary>
-    public static string FormatArxServerDxSpot(DxSpot spot)
+    public static string FormatArxClientDx(DxSpot spot, string spotterNode = "")
     {
-        var freq = spot.Freq.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
-        var time = spot.Timestamp.ToUniversalTime().ToString("HHmm") + "Z";
-        var date = spot.Timestamp.ToUniversalTime().ToString("dd-MMM-yyyy");
-        // Simple XML build — avoids taking a dependency on the Arx project from Engine
-        return $"<AB5K_Server_DxSpot>" +
+        var ic = System.Globalization.CultureInfo.InvariantCulture;
+        // Freq: no trailing zeros — "14025" not "14025.0", "14214.9" for fractional
+        var freq = spot.Freq % 1 == 0
+            ? ((int)spot.Freq).ToString(ic)
+            : spot.Freq.ToString("G", ic);
+        var dts = spot.Timestamp.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss");
+        var band = spot.Band % 1 == 0
+            ? ((int)spot.Band).ToString(ic)
+            : spot.Band.ToString("G", ic);
+
+        return "<AB5K_Client_Dx>" +
                $"<Call>{Escape(spot.Call)}</Call>" +
                $"<Freq>{freq}</Freq>" +
                $"<Comment>{Escape(spot.Comment)}</Comment>" +
                $"<Spotter>{Escape(spot.Spotter)}</Spotter>" +
-               $"<Time>{time}</Time>" +
-               $"<Date>{date}</Date>" +
-               $"<Band>{spot.Band.ToString(System.Globalization.CultureInfo.InvariantCulture)}</Band>" +
-               $"<Mode>{Escape(spot.Mode)}</Mode>" +
+               $"<SpotterNode>{Escape(spotterNode)}</SpotterNode>" +
+               $"<Dts>{dts}</Dts>" +
+               "<Name></Name>" +
+               "<Grid></Grid>" +
                $"<Cty>{Escape(spot.Cty)}</Cty>" +
                $"<Cont>{Escape(spot.Cont)}</Cont>" +
-               $"</AB5K_Server_DxSpot>";
+               "<County></County>" +
+               "<State></State>" +
+               "<ArrlSection></ArrlSection>" +
+               $"<CqZone>{spot.CqZone}</CqZone>" +
+               $"<ItuZone>{spot.ItuZone}</ItuZone>" +
+               "<Lotw>false</Lotw>" +
+               "<Cq>false</Cq>" +
+               "<Bob>false</Bob>" +
+               "<Skimmer>false</Skimmer>" +
+               "<SkimDb>0</SkimDb>" +
+               "<SkimWpm>0</SkimWpm>" +
+               "<SkimDupe>false</SkimDupe>" +
+               "<SkimCq>false</SkimCq>" +
+               "<Unique>1</Unique>" +
+               "<Master>false</Master>" +
+               "<InCb>false</InCb>" +
+               "<Top100>false</Top100>" +
+               "<Ham>true</Ham>" +
+               "<Foc>false</Foc>" +
+               $"<Band>{band}</Band>" +
+               $"<Mode>{Escape(spot.Mode)}</Mode>" +
+               $"<SpotterCont>{Escape(spot.SpotterCont)}</SpotterCont>" +
+               $"<SpotterCty>{Escape(spot.SpotterCty)}</SpotterCty>" +
+               "<SpotterState></SpotterState>" +
+               $"<SpotterCqZone>{spot.SpotterCqZone}</SpotterCqZone>" +
+               $"<SpotterItuZone>{spot.SpotterItuZone}</SpotterItuZone>" +
+               "</AB5K_Client_Dx>";
     }
 
     private static string Escape(string v) => v

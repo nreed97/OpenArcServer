@@ -140,7 +140,7 @@ public sealed class DxSpotCommand : IArcCommand
         if (!isDupe)
         {
             resp.PcxxMessage = DxSpotFormatter.FormatPc11(spot, session.Callsign);
-            resp.ArxMessage  = DxSpotFormatter.FormatArxServerDxSpot(spot);
+            resp.ArxMessage  = DxSpotFormatter.FormatArxClientDx(spot);
         }
     }
 
