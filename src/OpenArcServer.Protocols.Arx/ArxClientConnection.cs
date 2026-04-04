@@ -17,26 +17,29 @@ namespace OpenArcServer.Protocols.Arx;
 ///   2. Client → Server: AB5K_LoginResp (client provides callsign, Type=ArcUser)
 ///   3. Server → Client: AB5K_Client_Dx frames for each DX spot broadcast
 ///
-/// The client only sends TCP ACKs after the initial login response.
-/// Spot posting from the client happens on the separate telnet connection (port 7373).
+/// Some clients also post spots as AB5K_Client_DxSpot frames on this connection
+/// after the login handshake, so incoming frames are processed via IArxMessageProcessor.
 /// </summary>
 public sealed class ArxClientConnection
 {
     private readonly TcpClient _client;
     private readonly IArxClientRegistry _arxRegistry;
+    private readonly IArxMessageProcessor _arxProcessor;
     private readonly ServerOptions _serverOpts;
     private readonly ILogger<ArxClientConnection> _log;
 
     public ArxClientConnection(
         TcpClient client,
         IArxClientRegistry arxRegistry,
+        IArxMessageProcessor arxProcessor,
         IOptions<ServerOptions> serverOpts,
         ILogger<ArxClientConnection> log)
     {
-        _client      = client;
-        _arxRegistry = arxRegistry;
-        _serverOpts  = serverOpts.Value;
-        _log         = log;
+        _client       = client;
+        _arxRegistry  = arxRegistry;
+        _arxProcessor = arxProcessor;
+        _serverOpts   = serverOpts.Value;
+        _log          = log;
     }
 
     public async Task HandleAsync(CancellationToken ct)
@@ -81,14 +84,25 @@ public sealed class ArxClientConnection
             };
             _arxRegistry.Add(session);
 
-            // Keep connection alive — read until disconnected.
-            // Client sends only TCP ACKs after login; any data would be future ARx2 commands.
+            // Read any ARx2 frames sent by the client after login
+            // (e.g. AB5K_Client_DxSpot spot posting frames).
+            var acc = new List<byte>(4096);
             var buf = new byte[4096];
             while (!ct.IsCancellationRequested)
             {
                 int n = await stream.ReadAsync(buf, ct);
                 if (n == 0) break; // client disconnected
-                // Future: process any ARx2 frames the client sends (e.g. spot posting)
+
+                acc.AddRange(buf.AsSpan(0, n).ToArray());
+
+                // Extract and process all complete frames from the accumulator
+                while (true)
+                {
+                    var xml = ArxFrame.TryExtract(acc.ToArray().AsSpan(), out int consumed);
+                    if (xml is null) break; // no complete frame yet
+                    acc.RemoveRange(0, consumed);
+                    await _arxProcessor.ProcessAsync(session, xml, ct);
+                }
             }
         }
         catch (OperationCanceledException) { }

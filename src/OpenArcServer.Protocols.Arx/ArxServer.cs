@@ -68,6 +68,7 @@ public sealed class ArxServer : BackgroundService
                     var conn = new ArxClientConnection(
                         capturedClient,
                         sp.GetRequiredService<IArxClientRegistry>(),
+                        sp.GetRequiredService<IArxMessageProcessor>(),
                         sp.GetRequiredService<IOptions<ServerOptions>>(),
                         sp.GetRequiredService<ILogger<ArxClientConnection>>());
 
