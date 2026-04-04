@@ -194,6 +194,7 @@ public sealed class RbnClient : BackgroundService
             Call = call,
             Spotter = spotter,
             SpotterNode = "RBN",
+            Skimmer = true,
             Freq = freq,
             Band = band,
             Mode = mode,

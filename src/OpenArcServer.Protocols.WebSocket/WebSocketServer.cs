@@ -1,5 +1,7 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
@@ -14,8 +16,17 @@ using OpenArcServer.Engine.Commands;
 
 namespace OpenArcServer.Protocols.WebSocket;
 
+/// <summary>
+/// WebSocket server built on a raw <see cref="TcpListener"/> with a manual
+/// RFC 6455 opening handshake.  Unlike <see cref="System.Net.HttpListener"/>
+/// this requires no Windows HTTP.sys URL ACL reservation and works under any
+/// user account.
+/// </summary>
 public sealed class WebSocketServer : BackgroundService
 {
+    // Magic GUID defined by RFC 6455
+    private const string WsGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
     private readonly WebSocketOptions _opts;
     private readonly ServerOptions _serverOpts;
     private readonly IConnectionManager _connections;
@@ -49,53 +60,134 @@ public sealed class WebSocketServer : BackgroundService
     {
         if (!_opts.Enabled) { _log.LogInformation("WebSocket server is disabled"); return; }
 
-        var listener = new HttpListener();
-        // Use * for HttpListener to bind to all interfaces (0.0.0.0 doesn't work directly)
-        var bindHost = _opts.BindAddress == "0.0.0.0" ? "*" : _opts.BindAddress;
-        listener.Prefixes.Add($"http://{bindHost}:{_opts.Port}/ws/");
+        var bindAddr = _opts.BindAddress == "0.0.0.0"
+            ? IPAddress.Any
+            : IPAddress.Parse(_opts.BindAddress);
+
+        var listener = new TcpListener(bindAddr, _opts.Port);
         listener.Start();
-        _log.LogInformation("WebSocket server listening on {BindAddress}:{Port}/ws/", _opts.BindAddress, _opts.Port);
+        _log.LogInformation("WebSocket server listening on {BindAddress}:{Port}", _opts.BindAddress, _opts.Port);
+
+        // Stop the listener when the host shuts down
+        stoppingToken.Register(() => listener.Stop());
 
         try
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                HttpListenerContext ctx;
-                try { ctx = await listener.GetContextAsync().WaitAsync(stoppingToken); }
+                TcpClient client;
+                try { client = await listener.AcceptTcpClientAsync(stoppingToken); }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex) { _log.LogError(ex, "WS accept error"); continue; }
 
-                if (!ctx.Request.IsWebSocketRequest)
-                {
-                    ctx.Response.StatusCode = 400;
-                    ctx.Response.Close();
-                    continue;
-                }
-
-                _ = Task.Run(() => HandleClientAsync(ctx, stoppingToken), stoppingToken);
+                _ = Task.Run(() => HandleClientAsync(client, stoppingToken), stoppingToken);
             }
         }
         finally
         {
-            listener.Stop();
+            try { listener.Stop(); } catch { }
             _log.LogInformation("WebSocket server stopped");
         }
     }
 
-    private async Task HandleClientAsync(HttpListenerContext httpCtx, CancellationToken ct)
+    // ── RFC 6455 opening handshake ────────────────────────────────────────
+
+    private async Task HandleClientAsync(TcpClient tcp, CancellationToken ct)
     {
-        var endpoint = httpCtx.Request.RemoteEndPoint?.ToString() ?? "unknown";
-        System.Net.WebSockets.WebSocket ws;
+        var endpoint = tcp.Client.RemoteEndPoint?.ToString() ?? "unknown";
+        System.Net.WebSockets.WebSocket? ws = null;
+
         try
         {
-            var wsCtx = await httpCtx.AcceptWebSocketAsync(null);
-            ws = wsCtx.WebSocket;
-        }
-        catch (Exception ex) { _log.LogWarning(ex, "WS handshake failed from {Endpoint}", endpoint); return; }
+            tcp.NoDelay = true;
+            var stream = tcp.GetStream();
 
+            // 1. Read HTTP upgrade request (until \r\n\r\n)
+            string? wsKey = await ReadUpgradeRequestAsync(stream, ct);
+            if (wsKey is null)
+            {
+                _log.LogDebug("WS: non-WebSocket or malformed HTTP request from {Endpoint}", endpoint);
+                var bad = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"u8.ToArray();
+                await stream.WriteAsync(bad, ct);
+                return;
+            }
+
+            // 2. Compute Sec-WebSocket-Accept
+            var accept = ComputeAcceptKey(wsKey);
+
+            // 3. Send 101 Switching Protocols
+            var response = Encoding.ASCII.GetBytes(
+                "HTTP/1.1 101 Switching Protocols\r\n" +
+                "Upgrade: websocket\r\n" +
+                "Connection: Upgrade\r\n" +
+                $"Sec-WebSocket-Accept: {accept}\r\n" +
+                "\r\n");
+            await stream.WriteAsync(response, ct);
+
+            // 4. Wrap stream in a managed WebSocket
+            ws = System.Net.WebSockets.WebSocket.CreateFromStream(
+                stream, isServer: true, subProtocol: null,
+                keepAliveInterval: TimeSpan.FromSeconds(30));
+
+            await HandleWebSocketAsync(ws, endpoint, ct);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { _log.LogWarning(ex, "WS error from {Endpoint}", endpoint); }
+        finally
+        {
+            try { ws?.Dispose(); } catch { }
+            try { tcp.Dispose(); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Reads the HTTP upgrade headers and returns the Sec-WebSocket-Key value,
+    /// or null if the request is not a valid WebSocket upgrade.
+    /// </summary>
+    private static async Task<string?> ReadUpgradeRequestAsync(NetworkStream stream, CancellationToken ct)
+    {
+        // Read bytes until we see the end-of-headers marker \r\n\r\n
+        var buf  = new byte[4096];
+        var recv = new StringBuilder();
+        while (true)
+        {
+            var n = await stream.ReadAsync(buf, ct);
+            if (n == 0) return null;
+            recv.Append(Encoding.ASCII.GetString(buf, 0, n));
+            if (recv.ToString().Contains("\r\n\r\n")) break;
+            if (recv.Length > 8192) return null; // guard against oversized headers
+        }
+
+        var headers = recv.ToString();
+
+        // Must be an Upgrade: websocket request
+        if (!headers.Contains("Upgrade: websocket", StringComparison.OrdinalIgnoreCase) &&
+            !headers.Contains("Upgrade:websocket",  StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        // Extract Sec-WebSocket-Key
+        foreach (var line in headers.Split("\r\n"))
+        {
+            if (line.StartsWith("Sec-WebSocket-Key:", StringComparison.OrdinalIgnoreCase))
+                return line["Sec-WebSocket-Key:".Length..].Trim();
+        }
+        return null;
+    }
+
+    private static string ComputeAcceptKey(string clientKey)
+    {
+        var combined = clientKey + WsGuid;
+        var hash     = SHA1.HashData(Encoding.ASCII.GetBytes(combined));
+        return Convert.ToBase64String(hash);
+    }
+
+    // ── Authenticated client session ──────────────────────────────────────
+
+    private async Task HandleWebSocketAsync(System.Net.WebSockets.WebSocket ws, string endpoint, CancellationToken ct)
+    {
         _log.LogInformation("WebSocket connection from {Endpoint}", endpoint);
 
-        // Step 1: Wait for auth message
+        // Wait for auth message (30 s timeout)
         string? callsign = null;
         try
         {
@@ -106,7 +198,7 @@ public sealed class WebSocketServer : BackgroundService
                 typeEl.GetString() == "auth" &&
                 msg.Value.TryGetProperty("callsign", out var callEl))
             {
-                var c = callEl.GetString()?.ToUpperInvariant();
+                var c = callEl.GetString()?.Trim().ToUpperInvariant();
                 if (IsValidCallsign(c)) callsign = c;
             }
         }
@@ -192,9 +284,10 @@ public sealed class WebSocketServer : BackgroundService
             _connections.RemoveSession(session.SessionId);
             _registry.Unregister(session.SessionId);
             _log.LogInformation("{Callsign} disconnected from WebSocket", callsign);
-            try { ws.Dispose(); } catch { }
         }
     }
+
+    // ── WebSocket framing helpers ─────────────────────────────────────────
 
     private static async Task<JsonElement?> ReceiveJsonAsync(System.Net.WebSockets.WebSocket ws, CancellationToken ct)
     {
