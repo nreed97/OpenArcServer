@@ -87,6 +87,7 @@ try
     builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
     builder.Services.AddSingleton<INodeManager, NodeManager>();
     builder.Services.AddSingleton<IArxClientRegistry, ArxClientRegistry>();
+    builder.Services.AddSingleton<IArxMessageProcessor, ArxMessageProcessor>();
     builder.Services.AddSingleton<IMessageDistributor, MessageDistributor>();
 
     // Commands (must be registered before ICommandRouter so router factory can resolve them)

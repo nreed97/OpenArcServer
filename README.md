@@ -12,7 +12,7 @@ Built through protocol analysis and compatibility research of the AR-Cluster Ser
 
 **Phase 2 complete — PCxx node peering, ARx2 native client support, and RBN integration all working.**
 
-The server accepts telnet connections on port 7373, the AR-Cluster native ARx2 client protocol on the same port (auto-detected), and inbound PCxx node connections on port 7300 for peering with DX Spider, CC Cluster, and other PCxx-compatible cluster nodes.
+The server accepts telnet connections on port 7373, the AR-Cluster native ARx2 client protocol on the same port (detected transparently mid-connection after plain-text login), and inbound PCxx node connections on port 7300 for peering with DX Spider, CC Cluster, and other PCxx-compatible cluster nodes.
 
 ```
 AR-Cluster Server
@@ -173,17 +173,20 @@ Outbound: add entries to `Peers` and OpenArcServer will connect and maintain the
 
 ### ARx2 Native Client Protocol
 
-The original AR-Cluster client (ArClient) uses a zlib-compressed XML protocol framed with `[Arx2]...[/Arx2]` delimiters. OpenArcServer auto-detects this on port 7373 — no separate port or configuration needed. ARx2 clients can post spots and receive spot broadcasts alongside standard telnet users.
+The original AR-Cluster client (ArClient) uses a hybrid connection model on port 7373 — no separate port needed:
+
+1. **Plain-text telnet login** — same prompt/callsign flow as any telnet client
+2. **ARx2 frames** — after login the client switches to sending zlib-compressed XML framed with `[Arx2]...[/Arx2]` delimiters
+
+OpenArcServer handles this transparently: `TelnetClientConnection` handles the plain-text login, then detects the `[Arx2]` frame marker mid-stream and automatically flips the session to ARx2 framing mode for both sending and receiving. No separate port or configuration is needed.
 
 **Wire format:** `[Arx2]{zlib-compressed UTF-8 XML}[/Arx2]`
 
-**Confirmed message types:**
+**Confirmed ARx2 message types (post-login):**
 
 | Direction | XML root element | Description |
 |-----------|-----------------|-------------|
 | Client → Server | `AB5K_Client_DxSpot` | Post a DX spot |
-| Client → Server | `AB5K_Client_LogIn` | Login with callsign |
-| Server → Client | `AB5K_Server_LogIn` | Login response |
 | Server → Client | `AB5K_Server_DxSpot` | Broadcast DX spot |
 
 Any unrecognised message type is logged in full (XML text) so new types can be identified and added as discovered.

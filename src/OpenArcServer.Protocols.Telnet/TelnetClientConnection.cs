@@ -9,6 +9,7 @@ using OpenArcServer.Core.Commands;
 using OpenArcServer.Core.Configuration;
 using OpenArcServer.Core.Services;
 using OpenArcServer.Core.Sessions;
+using OpenArcServer.Protocols.Arx;
 
 namespace OpenArcServer.Protocols.Telnet;
 
@@ -20,11 +21,17 @@ public sealed class TelnetClientConnection
     private readonly IMessageDistributor _distributor;
     private readonly IUserRepository _users;
     private readonly IFilterList _connectBlock;
+    private readonly IArxClientRegistry _arxRegistry;
+    private readonly IArxMessageProcessor _arxProcessor;
     private readonly TelnetOptions _opts;
     private readonly ServerOptions _serverOpts;
     private readonly ILogger<TelnetClientConnection> _log;
 
     private static readonly Encoding _enc = Encoding.UTF8;
+
+    // Set to true once the first [Arx2] frame arrives; flips SendAsync to ARx2 mode
+    private bool _isArxClient;
+    private NetworkStream? _stream;
 
     public TelnetClientConnection(
         TcpClient client,
@@ -33,19 +40,23 @@ public sealed class TelnetClientConnection
         IMessageDistributor distributor,
         IUserRepository users,
         IFilterList connectBlock,
+        IArxClientRegistry arxRegistry,
+        IArxMessageProcessor arxProcessor,
         IOptions<TelnetOptions> opts,
         IOptions<ServerOptions> serverOpts,
         ILogger<TelnetClientConnection> log)
     {
-        _client = client;
-        _connections = connections;
-        _router = router;
-        _distributor = distributor;
-        _users = users;
+        _client       = client;
+        _connections  = connections;
+        _router       = router;
+        _distributor  = distributor;
+        _users        = users;
         _connectBlock = connectBlock;
-        _opts = opts.Value;
-        _serverOpts = serverOpts.Value;
-        _log = log;
+        _arxRegistry  = arxRegistry;
+        _arxProcessor = arxProcessor;
+        _opts         = opts.Value;
+        _serverOpts   = serverOpts.Value;
+        _log          = log;
     }
 
     public async Task HandleAsync(CancellationToken ct)
@@ -55,17 +66,18 @@ public sealed class TelnetClientConnection
 
         var session = new UserSession
         {
-            RemoteEndpoint = endpoint,
+            RemoteEndpoint  = endpoint,
             ConnectionState = ConnectionState.Idle,
         };
 
-        var stream = _client.GetStream();
+        _stream = _client.GetStream();
         var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
+        // Default SendAsync — plain UTF-8 text (used for telnet and the initial login)
         session.SendAsync = async (text, token) =>
         {
             var bytes = _enc.GetBytes(text);
-            await stream.WriteAsync(bytes, token);
+            await _stream.WriteAsync(bytes, token);
         };
 
         session.DisconnectAsync = async () =>
@@ -75,12 +87,11 @@ public sealed class TelnetClientConnection
 
         var pipe = new Pipe();
 
-        var writing = FillPipeAsync(stream, pipe.Writer, cts.Token);
+        var writing = FillPipeAsync(_stream, pipe.Writer, cts.Token);
         var reading = ReadPipeAsync(pipe.Reader, session, cts.Token);
 
         try
         {
-            // Send intro
             await session.SendAsync(_opts.IntroMessage, cts.Token);
             session.ConnectionState = ConnectionState.CallsignRequest;
 
@@ -93,12 +104,14 @@ public sealed class TelnetClientConnection
         }
         finally
         {
+            if (_isArxClient)
+                _arxRegistry.Remove(session.SessionId);
+
             if (!string.IsNullOrEmpty(session.Callsign))
             {
                 _connections.RemoveSession(session.SessionId);
                 _log.LogInformation("{Callsign} disconnected from {Endpoint}", session.Callsign, endpoint);
 
-                // Update last-seen
                 try
                 {
                     var profile = await _users.GetOrCreateAsync(session.Callsign, ct);
@@ -115,9 +128,11 @@ public sealed class TelnetClientConnection
         }
     }
 
+    // ── Pipe fill ─────────────────────────────────────────────────────────
+
     private static async Task FillPipeAsync(NetworkStream stream, PipeWriter writer, CancellationToken ct)
     {
-        const int bufferSize = 1024;
+        const int bufferSize = 4096;
         while (!ct.IsCancellationRequested)
         {
             var memory = writer.GetMemory(bufferSize);
@@ -127,10 +142,7 @@ public sealed class TelnetClientConnection
                 if (bytesRead == 0) break;
                 writer.Advance(bytesRead);
             }
-            catch
-            {
-                break;
-            }
+            catch { break; }
 
             var result = await writer.FlushAsync(ct);
             if (result.IsCompleted) break;
@@ -138,47 +150,107 @@ public sealed class TelnetClientConnection
         await writer.CompleteAsync();
     }
 
+    // ── Pipe read — handles both plain-text lines and [Arx2] frames ───────
+
     private async Task ReadPipeAsync(PipeReader reader, UserSession session, CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
         {
             ReadResult result;
-            try
+            try { result = await reader.ReadAsync(ct); }
+            catch { break; }
+
+            var buffer   = result.Buffer;
+            var consumed = buffer.Start;
+            var examined = buffer.End;
+
+            bool progress = true;
+            while (progress && !ct.IsCancellationRequested)
             {
-                result = await reader.ReadAsync(ct);
-            }
-            catch
-            {
-                break;
+                progress = false;
+
+                // Check for [Arx2] frame (may arrive after login for ArClient)
+                if (TryPeekArxFrame(buffer))
+                {
+                    var bytes = buffer.ToArray();
+                    var xml   = ArxFrame.TryExtract(bytes, out int arxConsumed);
+
+                    if (xml is not null)
+                    {
+                        buffer   = buffer.Slice(arxConsumed);
+                        consumed = buffer.Start;
+                        progress = true;
+                        await ProcessArxFrameAsync(session, xml, ct);
+                        continue;
+                    }
+
+                    // Frame header present but frame incomplete — wait for more data
+                    examined = buffer.End;
+                    break;
+                }
+
+                // Fall through to plain-text line reading
+                if (TryReadLine(ref buffer, out var line))
+                {
+                    consumed = buffer.Start;
+                    progress = true;
+                    await ProcessLineAsync(session, line, ct);
+                }
             }
 
-            var buffer = result.Buffer;
-            SequencePosition consumed = buffer.Start;
-
-            while (TryReadLine(ref buffer, out var line))
-            {
-                consumed = buffer.Start;
-                await ProcessLineAsync(session, line, ct);
-            }
-
-            reader.AdvanceTo(consumed, buffer.End);
+            reader.AdvanceTo(consumed, examined);
             if (result.IsCompleted) break;
         }
         await reader.CompleteAsync();
     }
+
+    /// <summary>Returns true if the buffer starts with the [Arx2] frame opener.</summary>
+    private static bool TryPeekArxFrame(ReadOnlySequence<byte> buffer)
+    {
+        if (buffer.Length < 6) return false;
+        Span<byte> peek = stackalloc byte[6];
+        buffer.Slice(0, 6).CopyTo(peek);
+        return ArxFrame.StartsWithFrame(peek);
+    }
+
+    // ── ARx2 frame processing ─────────────────────────────────────────────
+
+    private async Task ProcessArxFrameAsync(UserSession session, string xml, CancellationToken ct)
+    {
+        if (!_isArxClient)
+        {
+            _isArxClient           = true;
+            session.ConnectType    = ConnectStateType.ArxClient;
+
+            // Flip SendAsync to ARx2-framed mode for spot broadcasts
+            var stream = _stream!;
+            session.SendAsync = async (data, token) =>
+            {
+                var bytes = ArxFrame.Wrap(data);
+                await stream.WriteAsync(bytes, token);
+            };
+
+            _arxRegistry.Add(session);
+            _log.LogInformation("ARx2 mode activated for {Callsign} from {Endpoint}",
+                session.Callsign, session.RemoteEndpoint);
+        }
+
+        await _arxProcessor.ProcessAsync(session, xml, ct);
+    }
+
+    // ── Plain-text line reading ───────────────────────────────────────────
 
     private static bool TryReadLine(ref ReadOnlySequence<byte> buffer, out string line)
     {
         var reader = new SequenceReader<byte>(buffer);
         if (reader.TryReadTo(out ReadOnlySequence<byte> lineSeq, (byte)'\n'))
         {
-            // Strip trailing \r if present
             var bytes = lineSeq.ToArray();
             int len = bytes.Length;
             while (len > 0 && (bytes[len - 1] == '\r' || bytes[len - 1] == '\n'))
                 len--;
 
-            line = Encoding.UTF8.GetString(bytes, 0, len);
+            line   = Encoding.UTF8.GetString(bytes, 0, len);
             buffer = buffer.Slice(reader.Position);
             return true;
         }
@@ -202,6 +274,8 @@ public sealed class TelnetClientConnection
         }
     }
 
+    // ── Login ─────────────────────────────────────────────────────────────
+
     private async Task HandleCallsignAsync(UserSession session, string callsign, CancellationToken ct)
     {
         if (!IsValidCallsign(callsign))
@@ -224,10 +298,9 @@ public sealed class TelnetClientConnection
             return;
         }
 
-        session.Callsign = callsign;
+        session.Callsign        = callsign;
         session.ConnectionState = ConnectionState.Connected;
 
-        // Load or create user profile
         var profile = await _users.GetOrCreateAsync(callsign, ct);
         profile.TotalConnects++;
         profile.LastSeen = DateTime.UtcNow;
@@ -244,7 +317,6 @@ public sealed class TelnetClientConnection
 
         await session.SendAsync!(welcome, ct);
 
-        // Send MOTD if available
         var motdPath = _serverOpts.MotdFile;
         if (File.Exists(motdPath))
         {
@@ -253,6 +325,8 @@ public sealed class TelnetClientConnection
                 await session.SendAsync!(motd.Replace("\n", "\r\n"), ct);
         }
     }
+
+    // ── Command dispatch ──────────────────────────────────────────────────
 
     private async Task HandleCommandAsync(UserSession session, string line, CancellationToken ct)
     {
