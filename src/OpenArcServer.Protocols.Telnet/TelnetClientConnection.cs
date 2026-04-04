@@ -9,6 +9,7 @@ using OpenArcServer.Core.Commands;
 using OpenArcServer.Core.Configuration;
 using OpenArcServer.Core.Services;
 using OpenArcServer.Core.Sessions;
+using OpenArcServer.Engine.Commands;
 using OpenArcServer.Protocols.Arx;
 
 namespace OpenArcServer.Protocols.Telnet;
@@ -22,6 +23,7 @@ public sealed class TelnetClientConnection
     private readonly IUserRepository _users;
     private readonly IFilterList _connectBlock;
     private readonly IArxMessageProcessor _arxProcessor;
+    private readonly BuddyAlertService _buddyAlerts;
     private readonly TelnetOptions _opts;
     private readonly ServerOptions _serverOpts;
     private readonly ILogger<TelnetClientConnection> _log;
@@ -36,6 +38,7 @@ public sealed class TelnetClientConnection
         IUserRepository users,
         IFilterList connectBlock,
         IArxMessageProcessor arxProcessor,
+        BuddyAlertService buddyAlerts,
         IOptions<TelnetOptions> opts,
         IOptions<ServerOptions> serverOpts,
         ILogger<TelnetClientConnection> log)
@@ -47,6 +50,7 @@ public sealed class TelnetClientConnection
         _users        = users;
         _connectBlock = connectBlock;
         _arxProcessor = arxProcessor;
+        _buddyAlerts  = buddyAlerts;
         _opts         = opts.Value;
         _serverOpts   = serverOpts.Value;
         _log          = log;
@@ -98,6 +102,10 @@ public sealed class TelnetClientConnection
         {
             if (!string.IsNullOrEmpty(session.Callsign))
             {
+                // Fire buddy disconnect alerts before removing from session list
+                try { await _buddyAlerts.NotifyDisconnectedAsync(session.Callsign, ct); }
+                catch { /* non-fatal */ }
+
                 _connections.RemoveSession(session.SessionId);
                 _log.LogInformation("{Callsign} disconnected from {Endpoint}", session.Callsign, endpoint);
 
@@ -317,6 +325,9 @@ public sealed class TelnetClientConnection
             if (!string.IsNullOrWhiteSpace(motd))
                 await session.SendAsync!(motd.Replace("\n", "\r\n"), ct);
         }
+
+        // Fire buddy connect alerts to online users who have this callsign on their list
+        _ = Task.Run(() => _buddyAlerts.NotifyConnectedAsync(callsign, ct), ct);
     }
 
     // ── Command dispatch ──────────────────────────────────────────────────

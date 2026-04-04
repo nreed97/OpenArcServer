@@ -54,6 +54,9 @@ try
     builder.Services.AddSingleton<DatabaseInitializer>();
     builder.Services.AddSingleton<IDxSpotRepository, SqliteDxSpotRepository>();
     builder.Services.AddSingleton<IUserRepository, SqliteUserRepository>();
+    builder.Services.AddSingleton<IWwvRepository, SqliteWwvRepository>();
+    builder.Services.AddSingleton<IWxRepository, SqliteWxRepository>();
+    builder.Services.AddSingleton<IBuddyRepository, SqliteBuddyRepository>();
 
     // File-based lookups (registered as singletons, path resolved at startup)
     builder.Services.AddSingleton<ICtyLookup>(sp =>
@@ -96,6 +99,7 @@ try
     builder.Services.AddSingleton<IArxClientRegistry, ArxClientRegistry>();
     builder.Services.AddSingleton<IArxMessageProcessor, ArxMessageProcessor>();
     builder.Services.AddSingleton<IMessageDistributor, MessageDistributor>();
+    builder.Services.AddSingleton<BuddyAlertService>();
 
     // Commands (must be registered before ICommandRouter so router factory can resolve them)
     builder.Services.AddSingleton<DxSpotCommand>(sp => new DxSpotCommand(
@@ -114,18 +118,82 @@ try
     builder.Services.AddSingleton<ShowTimeCommand>();
     builder.Services.AddSingleton<ByeCommand>();
     builder.Services.AddSingleton<HelpCommand>();
+    // DX filter commands
+    builder.Services.AddSingleton<SetDxBandCommand>();
+    builder.Services.AddSingleton<SetDxNoBandCommand>();
+    builder.Services.AddSingleton<SetDxModeCommand>();
+    builder.Services.AddSingleton<SetDxNoModeCommand>();
+    builder.Services.AddSingleton<SetDxContCommand>();
+    builder.Services.AddSingleton<SetDxNoContCommand>();
+    builder.Services.AddSingleton<SetDxCqCommand>();
+    builder.Services.AddSingleton<SetDxNoCqCommand>();
+    builder.Services.AddSingleton<ShowFilterCommand>();
+    // WWV/WX commands
+    builder.Services.AddSingleton<WwvCommand>();
+    builder.Services.AddSingleton<ShowWwvCommand>();
+    builder.Services.AddSingleton<WxCommand>();
+    builder.Services.AddSingleton<ShowWxCommand>();
+    // Talk / Announce
+    builder.Services.AddSingleton<TalkCommand>();
+    builder.Services.AddSingleton<AnnounceCommand>();
+    // SET profile commands
+    builder.Services.AddSingleton<SetNameCommand>();
+    builder.Services.AddSingleton<SetQthCommand>();
+    builder.Services.AddSingleton<SetGridCommand>();
+    builder.Services.AddSingleton<SetEmailCommand>();
+    builder.Services.AddSingleton<SetDxCountCommand>();
+    builder.Services.AddSingleton<ShowStationCommand>();
+    // Skimmer toggle
+    builder.Services.AddSingleton<SetSkimmerCommand>();
+    builder.Services.AddSingleton<SetNoSkimmerCommand>();
+    // Buddy list
+    builder.Services.AddSingleton<AddBuddyCommand>();
+    builder.Services.AddSingleton<DelBuddyCommand>();
+    builder.Services.AddSingleton<ShowBuddyCommand>();
 
     builder.Services.AddSingleton<ICommandRouter>(sp =>
     {
         var router = new CommandRouter();
-        router.Register("DX",          sp.GetRequiredService<DxSpotCommand>());
-        router.Register("SH DX",       sp.GetRequiredService<ShowDxCommand>());
-        router.Register("SH U",        sp.GetRequiredService<ShowUsersCommand>());
-        router.Register("SH N",        sp.GetRequiredService<ShowNodesCommand>());
-        router.Register("SH VERSION",  sp.GetRequiredService<ShowVersionCommand>());
-        router.Register("SH TIME",     sp.GetRequiredService<ShowTimeCommand>());
-        router.Register("BYE",         sp.GetRequiredService<ByeCommand>());
-        router.Register("HELP",        sp.GetRequiredService<HelpCommand>());
+        router.Register("DX",             sp.GetRequiredService<DxSpotCommand>());
+        router.Register("SH DX",          sp.GetRequiredService<ShowDxCommand>());
+        router.Register("SH U",           sp.GetRequiredService<ShowUsersCommand>());
+        router.Register("SH N",           sp.GetRequiredService<ShowNodesCommand>());
+        router.Register("SH VERSION",     sp.GetRequiredService<ShowVersionCommand>());
+        router.Register("SH TIME",        sp.GetRequiredService<ShowTimeCommand>());
+        router.Register("BYE",            sp.GetRequiredService<ByeCommand>());
+        router.Register("HELP",           sp.GetRequiredService<HelpCommand>());
+        // DX spot filters
+        router.Register("SET DX BAND",    sp.GetRequiredService<SetDxBandCommand>());
+        router.Register("SET DX NOBAND",  sp.GetRequiredService<SetDxNoBandCommand>());
+        router.Register("SET DX MODE",    sp.GetRequiredService<SetDxModeCommand>());
+        router.Register("SET DX NOMODE",  sp.GetRequiredService<SetDxNoModeCommand>());
+        router.Register("SET DX CONT",    sp.GetRequiredService<SetDxContCommand>());
+        router.Register("SET DX NOCONT",  sp.GetRequiredService<SetDxNoContCommand>());
+        router.Register("SET DX CQ",      sp.GetRequiredService<SetDxCqCommand>());
+        router.Register("SET DX NOCQ",    sp.GetRequiredService<SetDxNoCqCommand>());
+        router.Register("SH FILTER",      sp.GetRequiredService<ShowFilterCommand>());
+        // WWV / WX
+        router.Register("WWV",            sp.GetRequiredService<WwvCommand>());
+        router.Register("SH WWV",         sp.GetRequiredService<ShowWwvCommand>());
+        router.Register("WX",             sp.GetRequiredService<WxCommand>());
+        router.Register("SH WX",          sp.GetRequiredService<ShowWxCommand>());
+        // Talk / Announce
+        router.Register("TALK",           sp.GetRequiredService<TalkCommand>());
+        router.Register("ANN",            sp.GetRequiredService<AnnounceCommand>());
+        // SET profile commands
+        router.Register("SET NAME",       sp.GetRequiredService<SetNameCommand>());
+        router.Register("SET QTH",        sp.GetRequiredService<SetQthCommand>());
+        router.Register("SET GRID",       sp.GetRequiredService<SetGridCommand>());
+        router.Register("SET EMAIL",      sp.GetRequiredService<SetEmailCommand>());
+        router.Register("SET DXCOUNT",    sp.GetRequiredService<SetDxCountCommand>());
+        router.Register("SH STA",         sp.GetRequiredService<ShowStationCommand>());
+        // Skimmer toggle
+        router.Register("SET SKIMMER",    sp.GetRequiredService<SetSkimmerCommand>());
+        router.Register("SET NOSKIMMER",  sp.GetRequiredService<SetNoSkimmerCommand>());
+        // Buddy list
+        router.Register("ADD BUDDY",      sp.GetRequiredService<AddBuddyCommand>());
+        router.Register("DEL BUDDY",      sp.GetRequiredService<DelBuddyCommand>());
+        router.Register("SH BUDDY",       sp.GetRequiredService<ShowBuddyCommand>());
         return router;
     });
 

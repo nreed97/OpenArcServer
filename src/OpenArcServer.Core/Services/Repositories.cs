@@ -31,8 +31,30 @@ public interface IBandModeLookup
     BandModeEntry? LookupFrequency(float freqKhz);
 }
 
+public interface IWwvRepository
+{
+    Task<long> InsertAsync(WwvSpot spot, CancellationToken ct = default);
+    Task<IReadOnlyList<WwvSpot>> GetRecentAsync(int count, CancellationToken ct = default);
+    Task PurgeOlderThanAsync(DateTime cutoff, CancellationToken ct = default);
+}
+
+public interface IWxRepository
+{
+    Task<long> InsertAsync(WxSpot spot, CancellationToken ct = default);
+    Task<IReadOnlyList<WxSpot>> GetRecentAsync(int count, CancellationToken ct = default);
+    Task PurgeOlderThanAsync(DateTime cutoff, CancellationToken ct = default);
+}
+
 public interface IFilterList
 {
     bool IsBlocked(string value);
     IReadOnlyList<string> GetAll();
+}
+
+public interface IBuddyRepository
+{
+    Task AddAsync(string ownerCallsign, string buddyCallsign, CancellationToken ct = default);
+    Task RemoveAsync(string ownerCallsign, string buddyCallsign, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> GetBuddiesAsync(string ownerCallsign, CancellationToken ct = default);
+    Task<bool> IsBuddyAsync(string ownerCallsign, string targetCallsign, CancellationToken ct = default);
 }

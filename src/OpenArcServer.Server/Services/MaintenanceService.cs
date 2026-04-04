@@ -11,6 +11,8 @@ public sealed class MaintenanceService : BackgroundService
 {
     private readonly IDxSpotRepository _spots;
     private readonly IUserRepository _users;
+    private readonly IWwvRepository _wwv;
+    private readonly IWxRepository _wx;
     private readonly DuplicateSpotDetector _dupeDetector;
     private readonly DatabaseOptions _dbOpts;
     private readonly ILogger<MaintenanceService> _log;
@@ -18,12 +20,16 @@ public sealed class MaintenanceService : BackgroundService
     public MaintenanceService(
         IDxSpotRepository spots,
         IUserRepository users,
+        IWwvRepository wwv,
+        IWxRepository wx,
         DuplicateSpotDetector dupeDetector,
         IOptions<DatabaseOptions> dbOpts,
         ILogger<MaintenanceService> log)
     {
         _spots = spots;
         _users = users;
+        _wwv = wwv;
+        _wx = wx;
         _dupeDetector = dupeDetector;
         _dbOpts = dbOpts.Value;
         _log = log;
@@ -53,6 +59,11 @@ public sealed class MaintenanceService : BackgroundService
             // Purge old user records
             var userCutoff = DateTime.UtcNow.AddYears(-_dbOpts.UserRetentionYears);
             await _users.PurgeOlderThanAsync(userCutoff, ct);
+
+            // Purge old WWV/WX reports (use same retention as DX spots)
+            var propagationCutoff = DateTime.UtcNow.AddDays(-_dbOpts.DxSpotRetentionDays);
+            await _wwv.PurgeOlderThanAsync(propagationCutoff, ct);
+            await _wx.PurgeOlderThanAsync(propagationCutoff, ct);
 
             // Cleanup dupe cache
             _dupeDetector.Cleanup();

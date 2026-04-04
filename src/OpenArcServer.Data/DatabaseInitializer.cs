@@ -75,6 +75,37 @@ CREATE TABLE IF NOT EXISTS users (
     last_seen       TEXT    NOT NULL,
     total_connects  INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS wwv_spots (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    sfi             TEXT    NOT NULL DEFAULT '',
+    a_index         TEXT    NOT NULL DEFAULT '',
+    k_index         TEXT    NOT NULL DEFAULT '',
+    forecast        TEXT    NOT NULL DEFAULT '',
+    spotter         TEXT    NOT NULL DEFAULT '',
+    spotter_node    TEXT    NOT NULL DEFAULT '',
+    timestamp       TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_wwv_spots_timestamp ON wwv_spots (timestamp DESC);
+
+CREATE TABLE IF NOT EXISTS wx_spots (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    message         TEXT    NOT NULL DEFAULT '',
+    spotter         TEXT    NOT NULL DEFAULT '',
+    spotter_node    TEXT    NOT NULL DEFAULT '',
+    timestamp       TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_wx_spots_timestamp ON wx_spots (timestamp DESC);
+
+CREATE TABLE IF NOT EXISTS buddies (
+    owner_callsign  TEXT    NOT NULL,
+    buddy_callsign  TEXT    NOT NULL,
+    PRIMARY KEY (owner_callsign, buddy_callsign)
+);
+
+CREATE INDEX IF NOT EXISTS ix_buddies_owner ON buddies (owner_callsign);
 ";
         cmd.ExecuteNonQuery();
         _log.LogInformation("Database initialized successfully");

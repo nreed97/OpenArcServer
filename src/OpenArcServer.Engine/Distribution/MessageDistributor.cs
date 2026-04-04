@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using OpenArcServer.Core.Commands;
+using OpenArcServer.Core.Models;
 using OpenArcServer.Core.Services;
 using OpenArcServer.Core.Sessions;
 
@@ -42,7 +43,7 @@ public sealed class MessageDistributor : IMessageDistributor
             case Core.DistroType.ToAll:
                 // Telnet + ARx2 clients + PCxx nodes
                 if (!string.IsNullOrEmpty(text))
-                    await SendToAllUsersAsync(text, ct);
+                    await SendToAllUsersAsync(text, response.SpotData, ct);
                 if (!string.IsNullOrEmpty(response.ArxMessage))
                     await SendToAllArxClientsAsync(response.ArxMessage, ct);
                 if (!string.IsNullOrEmpty(response.PcxxMessage))
@@ -51,7 +52,7 @@ public sealed class MessageDistributor : IMessageDistributor
 
             case Core.DistroType.ToUsers:
                 if (!string.IsNullOrEmpty(text))
-                    await SendToAllUsersAsync(text, ct);
+                    await SendToAllUsersAsync(text, response.SpotData, ct);
                 if (!string.IsNullOrEmpty(response.ArxMessage))
                     await SendToAllArxClientsAsync(response.ArxMessage, ct);
                 break;
@@ -80,10 +81,16 @@ public sealed class MessageDistributor : IMessageDistributor
         }
     }
 
-    private async Task SendToAllUsersAsync(string text, CancellationToken ct)
+    private async Task SendToAllUsersAsync(string text, DxSpot? spotData, CancellationToken ct)
     {
         var sessions = _connections.GetConnectedUsers();
-        await Task.WhenAll(sessions.Select(s => SendToSessionAsync(s, text, ct)));
+        // If this is a DX spot, apply each user's real-time filter and skimmer preference.
+        IEnumerable<UserSession> targets = spotData is null
+            ? sessions
+            : sessions.Where(s =>
+                s.SpotFilter.Matches(spotData) &&
+                (s.ReceiveSkimmer || !spotData.Skimmer));
+        await Task.WhenAll(targets.Select(s => SendToSessionAsync(s, text, ct)));
     }
 
     private async Task SendToAllArxClientsAsync(string arxXml, CancellationToken ct)

@@ -51,13 +51,17 @@ public sealed class ShowDxCommand : IArcCommand
         else
             spots = await _spots.GetRecentAsync(count, ct);
 
-        if (spots.Count == 0)
+        // Apply the user's real-time filter (same criteria as live spot delivery)
+        var filter = session.SpotFilter;
+        var filtered = filter.IsEmpty ? spots : spots.Where(filter.Matches).ToList();
+
+        if (filtered.Count == 0)
         {
-            resp.Messages.Add("No spots found.");
+            resp.Messages.Add(spots.Count == 0 ? "No spots found." : "No spots match your current filter.");
         }
         else
         {
-            foreach (var line in DxSpotFormatter.FormatList(spots))
+            foreach (var line in DxSpotFormatter.FormatList(filtered))
                 resp.Messages.Add(line);
         }
 

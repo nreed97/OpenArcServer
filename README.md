@@ -10,7 +10,7 @@ Built through protocol analysis and compatibility research of the AR-Cluster Ser
 
 ## Status
 
-**Phase 2 complete — PCxx node peering, ARx2 native client support, and RBN integration all working.**
+**Phase 3 complete — DX spot filtering, SET profile commands, TALK, ANN, WWV/WX propagation, skimmer toggle, and buddy list alerts all working.**
 
 The server accepts telnet connections on port 7373, the AR-Cluster native ARx2 client protocol on port 3608 (confirmed from Wireshark captures of real K1TTT traffic), and inbound PCxx node connections on port 7300 for peering with DX Spider, CC Cluster, and other PCxx-compatible cluster nodes.
 
@@ -255,6 +255,81 @@ docs/
 data/                              # Reference data files
 ```
 
+## Features (Phase 3)
+
+### DX Spot Filtering
+
+Each connected user can apply real-time filters so they only receive spots matching their interests. Filters persist for the session; `SH/FILTER` shows the current settings.
+
+| Command | Description |
+|---------|-------------|
+| `SET/DX/BAND <bands>` | Only receive spots on specified bands (e.g. `20m 40m 15m`) |
+| `SET/DX/NOBAND` | Clear band filter — receive all bands |
+| `SET/DX/MODE <modes>` | Only receive spots for specified modes (e.g. `CW SSB FT8`) |
+| `SET/DX/NOMODE` | Clear mode filter |
+| `SET/DX/CONT <conts>` | Only receive spots from specified continents (`NA EU AF AS SA OC AN`) |
+| `SET/DX/NOCONT` | Clear continent filter |
+| `SET/DX/CQ <zones>` | Only receive spots from specified CQ zones (1-40) |
+| `SET/DX/NOCQ` | Clear CQ zone filter |
+| `SET/SKIMMER` | Enable skimmer/RBN spots (default) |
+| `SET/NOSKIMMER` | Suppress skimmer/RBN spots |
+| `SH/FILTER` | Show your current filter settings |
+
+`SH/DX` also applies the user's active filter to the spot history listing.
+
+### Station Profile (SET Commands)
+
+| Command | Description |
+|---------|-------------|
+| `SET/NAME <name>` | Set your operator name (persisted across sessions) |
+| `SET/QTH <location>` | Set your QTH / location description |
+| `SET/GRID <grid>` | Set your Maidenhead grid square (e.g. `FN42`) |
+| `SET/EMAIL <address>` | Set your email address |
+| `SET/DXCOUNT <n>` | Set default number of spots shown by `SH/DX` (1-100) |
+| `SH/STA [callsign]` | Show station info for yourself or another user |
+
+### Talk & Announcements
+
+| Command | Description |
+|---------|-------------|
+| `T <callsign> <message>` | Send a private talk message to a connected user |
+| `ANN <message>` | Broadcast an announcement to all connected users |
+
+Private talk format: `Talk(W1AW) hello there` delivered directly to the recipient; the sender sees an echo `Talk(to W1AW) hello there`.
+
+Announcement format: `To ALL de W1AW    : Hello everyone!                             1530Z`
+
+### WWV / Propagation Reports
+
+| Command | Description |
+|---------|-------------|
+| `WWV <sfi> <a> <k> [forecast]` | Post a WWV solar/geomagnetic propagation report |
+| `SH/WWV [n]` | Show last *n* WWV reports (default 5) |
+
+Format: `WWV de W1AW     <04-APR-2026>: SFI=150, A=5, K=2, No Storms             1530Z`
+
+### Weather Reports
+
+| Command | Description |
+|---------|-------------|
+| `WX <message>` | Post a weather announcement broadcast to all users |
+| `SH/WX [n]` | Show last *n* WX reports (default 5) |
+
+Format: `WX de W1AW      <04-APR-2026>: Sunny and warm, winds SW 10 mph           1530Z`
+
+### Buddy List Alerts
+
+| Command | Description |
+|---------|-------------|
+| `ADD/BUDDY <callsign>` | Add a callsign to your buddy list (persisted in DB) |
+| `DEL/BUDDY <callsign>` | Remove a callsign from your buddy list |
+| `SH/BUDDY` | Show your buddy list with online/offline status |
+
+When a buddy connects or disconnects, online users who have them on their list receive an instant alert:
+```
+*** Buddy W1AW has connected to the cluster ***
+```
+
 ## Roadmap
 
 ### Phase 2 — Networking ✓
@@ -266,15 +341,15 @@ data/                              # Reference data files
 - [x] Reverse Beacon Network (RBN) telnet feed integration
 - [x] ARx2 native client protocol (original AR-Cluster client support)
 
-### Phase 3 — Advanced Features
-- [ ] DX spot filtering (band, mode, continent, prefix, CQ zone)
-- [ ] WWV/WX propagation data
-- [ ] Talk / private messaging
-- [ ] Chat rooms
-- [ ] `SET` commands (SET/STA, SET/QTH, SET/HOME, etc.)
-- [ ] Callbook lookups (HamQTH, QRZ)
-- [ ] Skimmer spot processing
-- [ ] Buddy list alerts
+### Phase 3 — Advanced Features ✓
+- [x] DX spot filtering (band, mode, continent, CQ zone) per user
+- [x] Skimmer/RBN spot toggle (SET/SKIMMER, SET/NOSKIMMER)
+- [x] WWV/WX propagation data (post + query, persisted in DB)
+- [x] Talk / private messaging (T command)
+- [x] Announcements (ANN command)
+- [x] `SET` commands (SET/NAME, SET/QTH, SET/GRID, SET/EMAIL, SET/DXCOUNT)
+- [x] SH/STA station info (self + any callsign)
+- [x] Buddy list alerts (ADD/BUDDY, DEL/BUDDY, SH/BUDDY, connect/disconnect notifications)
 
 ### Phase 4 — Modern Enhancements
 - [ ] WebSocket server for browser clients

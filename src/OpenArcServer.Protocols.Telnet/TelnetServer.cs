@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenArcServer.Core.Configuration;
 using OpenArcServer.Core.Services;
+using OpenArcServer.Engine.Commands;
 
 namespace OpenArcServer.Protocols.Telnet;
 
@@ -72,6 +73,7 @@ public sealed class TelnetServer : BackgroundService
                         sp.GetRequiredService<IUserRepository>(),
                         sp.GetRequiredKeyedService<IFilterList>("connectblock"),
                         sp.GetRequiredService<IArxMessageProcessor>(),
+                        sp.GetRequiredService<BuddyAlertService>(),
                         sp.GetRequiredService<IOptions<TelnetOptions>>(),
                         sp.GetRequiredService<IOptions<ServerOptions>>(),
                         sp.GetRequiredService<ILogger<TelnetClientConnection>>());

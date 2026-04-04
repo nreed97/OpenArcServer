@@ -55,6 +55,12 @@ public sealed class CommandResponse
     /// <summary>ARx2 XML to send to ARx2 native clients when DistroType is ToAll.</summary>
     public string? ArxMessage { get; set; }
 
+    /// <summary>
+    /// The DX spot that triggered this response. When set, MessageDistributor will apply
+    /// each user's SpotFilter before delivering the spot to them.
+    /// </summary>
+    public Models.DxSpot? SpotData { get; set; }
+
     public void AddLine(string line) => Messages.Add(line);
     public void AddLines(IEnumerable<string> lines) => Messages.AddRange(lines);
 }

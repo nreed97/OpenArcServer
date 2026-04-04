@@ -21,6 +21,12 @@ public sealed class UserSession
     // User preferences
     public int DxCount { get; set; } = 10;
 
+    /// <summary>When false the user suppresses all skimmer/RBN spots.</summary>
+    public bool ReceiveSkimmer { get; set; } = true;
+
+    // Real-time spot filter (configured via SET/DX/BAND, MODE, CONT, CQ)
+    public SpotFilter SpotFilter { get; } = new();
+
     // Send callback - set by the telnet connection handler
     public Func<string, CancellationToken, Task>? SendAsync { get; set; }
 
