@@ -1,0 +1,53 @@
+#------------------------------------------------------------------------------------------------------------------------
+# AR-Cluster Bad Word list - edit as desired, The ARC logic is case insensitive so just enter the word once.
+#------------------------------------------------------------------------------------------------------------------------
+shit
+piss
+fuck
+cunt
+cocksucker
+motherfucker
+tits
+penis
+penishead
+asshole
+blowjob
+boob
+crap
+cum
+fag
+handjob
+jerkoff
+nigger
+poontang
+prick
+twat
+dickhead
+cunny
+a$$
+a$$hole
+#------------------------------------------------------------------------------------------------------------------------
+# If you use AR-Cluster to aggregrate spots during CW or SSB contests, the following key-words can be uncommented to
+# further filter non CW and SSB spots
+#------------------------------------------------------------------------------------------------------------------------
+#amtor 
+#AO16
+#AO-16
+#AO3
+#AO-3
+#BPSK31
+#BPSK63
+#FELD HELL
+#FELD-HELL
+#JT65
+#PACTOR
+#PSK
+#PSK31
+#OLIVIA
+#QPSK
+#QPSK31
+#RTTY
+#SPSK31
+#SSTV
+#------------------------------------------------------------------------------------------------------------------------
+#!!#

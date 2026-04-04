@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OpenArcServer.Core/OpenArcServer.Core.csproj" />
+    <Project Path="src/OpenArcServer.Data/OpenArcServer.Data.csproj" />
+    <Project Path="src/OpenArcServer.Engine/OpenArcServer.Engine.csproj" />
+    <Project Path="src/OpenArcServer.Protocols.Telnet/OpenArcServer.Protocols.Telnet.csproj" />
+    <Project Path="src/OpenArcServer.Server/OpenArcServer.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OpenArcServer.Data.Tests/OpenArcServer.Data.Tests.csproj" />
+    <Project Path="tests/OpenArcServer.Engine.Tests/OpenArcServer.Engine.Tests.csproj" />
+    <Project Path="tests/OpenArcServer.Integration.Tests/OpenArcServer.Integration.Tests.csproj" />
+  </Folder>
+</Solution>

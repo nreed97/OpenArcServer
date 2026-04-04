@@ -1,0 +1,11 @@
+#------------------------------------------------------------------------------------------------------------------------
+# Connect Block List - A list of calls blocked from connecting to the cluster.  This list is downloaded from the 
+# server every night.   You can maintain your own list by adding a MyConnectBlock.dat file
+#------------------------------------------------------------------------------------------------------------------------
+007
+MYCALL
+NOCALL
+OO7
+PK232
+5Z4FT
+KI4LTH
