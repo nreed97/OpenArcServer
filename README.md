@@ -4,9 +4,9 @@ An open-source, cross-platform DX cluster server compatible with existing AR-Clu
 
 ## Background
 
-**AR-Cluster Server** was a popular DX cluster server created by Terry Dawson, AB5K (SK). With the original author having passed away and no source code available, this project recreates a compatible server that works with the thousands of existing DX cluster clients deployed worldwide.
+**AR-Cluster Server** was a popular DX cluster server created by Terry Gerdes, AB5K (SK). With the original author having passed away and no source code available, this project recreates a compatible server that works with the thousands of existing DX cluster clients deployed worldwide.
 
-Born from reverse engineering the original `ArcServerSetup.msi` installer (version 6.1, January 2014) — a .NET 4.0 WinForms application using SQL Server Compact Edition 3.5.
+Built through protocol analysis and compatibility research of the AR-Cluster Server ecosystem (version 6.1, January 2014) — a .NET 4.0 WinForms application. OpenArcServer is an independent, clean-room implementation sharing no code with the original.
 
 ## Status
 
@@ -172,7 +172,7 @@ tests/
   OpenArcServer.Data.Tests/
   OpenArcServer.Integration.Tests/
 docs/
-  REVERSE-ENGINEERING.md           # Full analysis of original ArcServer
+  REVERSE-ENGINEERING.md           # Protocol specs and compatibility research
   IMPLEMENTATION-PLAN.md           # Phase 1 build plan
 data/                              # Reference data files
 ```
@@ -213,9 +213,9 @@ Contributions welcome! Key areas:
 - Unit and integration tests
 - Phase 2+ features
 
-## Reverse Engineering
+## Protocol & Architecture Reference
 
-See [docs/REVERSE-ENGINEERING.md](docs/REVERSE-ENGINEERING.md) for the complete analysis of the original ArcServer, including protocol specifications, database schema, networking architecture, and data file formats.
+See [docs/REVERSE-ENGINEERING.md](docs/REVERSE-ENGINEERING.md) for protocol specifications, database schema, networking architecture, and data file format analysis used to build compatibility with existing AR-Cluster clients.
 
 ## License
 
@@ -223,5 +223,5 @@ MIT License
 
 ## Acknowledgments
 
-- **Terry Dawson, AB5K (SK)** — Original AR-Cluster Server author. This project continues his legacy.
+- **Terry Gerdes, AB5K (SK)** — Original AR-Cluster Server author. This project continues his legacy.
 - The amateur radio DX cluster community
