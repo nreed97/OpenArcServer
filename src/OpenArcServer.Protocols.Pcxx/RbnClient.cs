@@ -112,6 +112,22 @@ public sealed class RbnClient : BackgroundService
             var text = partial.ToString();
             partial.Clear();
 
+            // ── Pre-login: scan the entire accumulated buffer for the prompt ──────
+            // RBN sends "Please enter your call: " with NO trailing newline, so it
+            // will never appear as a complete \n-terminated line.  We must check the
+            // raw accumulated text (both complete lines and the unterminated tail).
+            if (!loginSent && text.Contains("call", StringComparison.OrdinalIgnoreCase))
+            {
+                var callsign = _opts.Callsign.Trim().ToUpperInvariant();
+                _log.LogInformation("RBN: detected login prompt, sending callsign {Callsign}", callsign);
+                var login = enc.GetBytes(callsign + "\r\n");
+                await stream.WriteAsync(login, ct);
+                loginSent = true;
+                // Discard banner content — nothing useful in it for us
+                continue;
+            }
+
+            // ── Post-login: process spot lines ────────────────────────────────────
             int start = 0;
             for (int i = 0; i < text.Length; i++)
             {
@@ -127,19 +143,6 @@ public sealed class RbnClient : BackgroundService
 
             if (start < text.Length)
                 partial.Append(text[start..]);
-
-            // RBN's login prompt ("Please enter your call: ") has no trailing newline,
-            // so it never becomes a complete line above.  Detect it in the unterminated
-            // tail of the buffer and respond immediately.
-            if (!loginSent && partial.ToString().Contains("call", StringComparison.OrdinalIgnoreCase))
-            {
-                var callsign = _opts.Callsign.ToUpperInvariant();
-                var login = enc.GetBytes(callsign + "\r\n");
-                await stream.WriteAsync(login, ct);
-                loginSent = true;
-                partial.Clear();
-                _log.LogInformation("RBN client logged in as {Callsign}", callsign);
-            }
         }
     }
 
