@@ -10,9 +10,9 @@ Born from reverse engineering the original `ArcServerSetup.msi` installer (versi
 
 ## Status
 
-**Phase 1 MVP — complete and working.**
+**Phase 2 — PCxx node peering complete and working.**
 
-The server accepts telnet connections on port 7373 and is compatible with N1MM+, DXLab SpotCollector, Logger32, and any other AR-Cluster telnet client.
+The server accepts telnet connections on port 7373 and is compatible with N1MM+, DXLab SpotCollector, Logger32, and any other AR-Cluster telnet client. It also accepts inbound PCxx node connections on port 7300 for peering with DX Spider, CC Cluster, and other PCxx-compatible cluster nodes.
 
 ```
 AR-Cluster Server
@@ -100,6 +100,63 @@ The following data files go in `src/OpenArcServer.Server/data/`:
 | `BadWord.dat` | Included | Comment bad word filter |
 | `motd.txt` | Optional | Message of the day shown on login |
 
+## Building
+
+```bash
+dotnet build
+dotnet test
+dotnet run --project src/OpenArcServer.Server
+```
+
+## Features (Phase 2)
+
+### PCxx Node Peering
+
+OpenArcServer can accept inbound connections from other DX cluster nodes using the PCxx protocol (used by DX Spider, CC Cluster, and AR-Cluster). This allows spots from peer nodes to be distributed to your connected users, and vice versa.
+
+**Supported PCxx messages:**
+
+| Message | Direction | Description |
+|---------|-----------|-------------|
+| PC11 | Both | DX spot |
+| PC12 | Inbound | Announcement/talk |
+| PC16 | Outbound | User connected notification |
+| PC17 | Outbound | User disconnected notification |
+| PC18 | Inbound | Init request from peer |
+| PC19 | Outbound | Node topology exchange |
+| PC20 | Outbound | Handshake turnaround |
+| PC21 | Both | Node disconnected |
+| PC22 | Outbound | Init complete |
+| PC38 | Outbound | Init start response |
+| PC51 | Both | Ping/pong keepalive |
+
+**Handshake sequence** (peer connects to us):
+```
+Peer → PC18^PEERNODE^
+Us   → PC38^OURNODECALL^
+Us   → PC19^1^node1^port^ver^^us^  (one per known node)
+Us   → PC20^OURNODECALL^
+Us   → PC22^OURNODECALL^
+Us   → PC16^callsign^OURNODECALL^^^  (one per connected user)
+```
+
+**Enable PCxx peering** in `appsettings.json`:
+
+```json
+{
+  "Pcxx": {
+    "Enabled": true,
+    "Port": 7300,
+    "BindAddress": "0.0.0.0",
+    "MaxNodeConnections": 50,
+    "PingIntervalSeconds": 300,
+    "NodeTimeoutMinutes": 30
+  }
+}
+```
+
+Then configure your peer node (e.g., DX Spider) to connect to your server's IP on port 7300.
+
 ## Solution Structure
 
 ```
@@ -108,6 +165,7 @@ src/
   OpenArcServer.Data/              # SQLite repos, CTY.DAT/BandMode parsers
   OpenArcServer.Engine/            # Commands, routing, distribution, spot pipeline
   OpenArcServer.Protocols.Telnet/  # TCP server, connection handler, login state machine
+  OpenArcServer.Protocols.Pcxx/    # PCxx node-to-node protocol server
   OpenArcServer.Server/            # Generic Host, DI wiring, appsettings.json
 tests/
   OpenArcServer.Engine.Tests/
@@ -119,20 +177,14 @@ docs/
 data/                              # Reference data files
 ```
 
-## Building
-
-```bash
-dotnet build
-dotnet test
-dotnet run --project src/OpenArcServer.Server
-```
-
 ## Roadmap
 
-### Phase 2 — Networking
-- [ ] PCxx protocol for DX Spider node peering
-- [ ] Spot/announcement distribution to peer nodes
-- [ ] Node topology management (PC16-PC22, PC38)
+### Phase 2 — Networking ✓
+- [x] PCxx protocol for DX Spider node peering
+- [x] Spot/announcement distribution to peer nodes
+- [x] Node topology management (PC16-PC22, PC38, PC51)
+- [ ] Outbound connections (connect TO peer nodes, not just accept)
+- [ ] SH/N (show nodes) command
 - [ ] Reverse Beacon Network (RBN) integration
 
 ### Phase 3 — Advanced Features

@@ -50,6 +50,8 @@ public sealed class CommandResponse
     public DistroType DistroType { get; set; } = DistroType.ToNil;
     public MsgType MsgType { get; set; } = MsgType.General;
     public string? TargetCallsign { get; set; }
+    /// <summary>Raw PCxx message to send to node peers (e.g. PC11 for DX spots).</summary>
+    public string? PcxxMessage { get; set; }
 
     public void AddLine(string line) => Messages.Add(line);
     public void AddLines(IEnumerable<string> lines) => Messages.AddRange(lines);

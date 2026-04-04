@@ -54,3 +54,17 @@ public sealed class SpotProcessingOptions
     public bool EnableDuplicateDetection { get; set; } = true;
     public int DuplicateWindowMinutes { get; set; } = 20;
 }
+
+public sealed class PcxxOptions
+{
+    public bool Enabled { get; set; } = false;
+    public int Port { get; set; } = 7300;
+    public string BindAddress { get; set; } = "0.0.0.0";
+    public int MaxNodeConnections { get; set; } = 50;
+    public int PingIntervalSeconds { get; set; } = 300;
+    public int NodeTimeoutMinutes { get; set; } = 30;
+    /// <summary>If true, ignore PC19/PC21/PC16/PC17 topology/user messages.</summary>
+    public bool IgnoreNodeUserProtocol { get; set; } = false;
+    /// <summary>Log outbound node protocol messages (PC18, PC19, PC20, PC22 etc.).</summary>
+    public bool LogOutboundNodeUser { get; set; } = false;
+}

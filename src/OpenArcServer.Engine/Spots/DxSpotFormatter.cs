@@ -38,4 +38,16 @@ public static class DxSpotFormatter
         foreach (var spot in spots)
             yield return Format(spot);
     }
+
+    /// <summary>
+    /// Build a PCxx PC11 DX spot message string.
+    /// Format: PC11^freq^dx_call^comment^date^time^spotter^node^
+    /// </summary>
+    public static string FormatPc11(DxSpot spot, string nodeCallsign)
+    {
+        var date = spot.Timestamp.ToUniversalTime().ToString("dd-MMM-yyyy");
+        var time = spot.Timestamp.ToUniversalTime().ToString("HHmm") + "Z";
+        var freq = spot.Freq.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+        return $"PC11^{freq}^{spot.Call}^{spot.Comment}^{date}^{time}^{spot.Spotter}^{nodeCallsign}^\r\n";
+    }
 }

@@ -5,6 +5,7 @@
     <ProjectReference Include="..\OpenArcServer.Data\OpenArcServer.Data.csproj" />
     <ProjectReference Include="..\OpenArcServer.Engine\OpenArcServer.Engine.csproj" />
     <ProjectReference Include="..\OpenArcServer.Protocols.Telnet\OpenArcServer.Protocols.Telnet.csproj" />
+    <ProjectReference Include="..\OpenArcServer.Protocols.Pcxx\OpenArcServer.Protocols.Pcxx.csproj" />
   </ItemGroup>
 
   <ItemGroup>

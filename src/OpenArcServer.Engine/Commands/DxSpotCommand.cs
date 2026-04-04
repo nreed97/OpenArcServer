@@ -137,6 +137,8 @@ public sealed class DxSpotCommand : IArcCommand
         resp.Messages.Add(DxSpotFormatter.Format(spot));
         resp.DistroType = isDupe ? DistroType.ToRequester : DistroType.ToAll;
         resp.MsgType = MsgType.Dx;
+        if (!isDupe)
+            resp.PcxxMessage = DxSpotFormatter.FormatPc11(spot, session.Callsign);
     }
 
 }

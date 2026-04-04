@@ -9,6 +9,7 @@ using OpenArcServer.Engine.Commands;
 using OpenArcServer.Engine.Distribution;
 using OpenArcServer.Engine.Routing;
 using OpenArcServer.Engine.Spots;
+using OpenArcServer.Protocols.Pcxx;
 using OpenArcServer.Protocols.Telnet;
 using OpenArcServer.Server.Services;
 using Serilog;
@@ -38,6 +39,7 @@ try
     builder.Services.Configure<DatabaseOptions>(builder.Configuration.GetSection("Database"));
     builder.Services.Configure<DataFileOptions>(builder.Configuration.GetSection("DataFiles"));
     builder.Services.Configure<SpotProcessingOptions>(builder.Configuration.GetSection("SpotProcessing"));
+    builder.Services.Configure<PcxxOptions>(builder.Configuration.GetSection("Pcxx"));
 
     // Data layer
     builder.Services.AddSingleton<DatabaseInitializer>();
@@ -81,6 +83,7 @@ try
     // Engine
     builder.Services.AddSingleton<DuplicateSpotDetector>();
     builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
+    builder.Services.AddSingleton<INodeManager, NodeManager>();
     builder.Services.AddSingleton<IMessageDistributor, MessageDistributor>();
 
     // Commands (must be registered before ICommandRouter so router factory can resolve them)
@@ -115,6 +118,9 @@ try
 
     // Telnet server
     builder.Services.AddHostedService<TelnetServer>();
+
+    // PCxx node server
+    builder.Services.AddHostedService<PcxxServer>();
 
     // Background maintenance
     builder.Services.AddHostedService<MaintenanceService>();
