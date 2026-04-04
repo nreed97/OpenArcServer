@@ -9,6 +9,7 @@ using OpenArcServer.Engine.Commands;
 using OpenArcServer.Engine.Distribution;
 using OpenArcServer.Engine.Routing;
 using OpenArcServer.Engine.Spots;
+using OpenArcServer.Protocols.Arx;
 using OpenArcServer.Protocols.Pcxx;
 using OpenArcServer.Protocols.Telnet;
 using OpenArcServer.Server.Services;
@@ -85,6 +86,7 @@ try
     builder.Services.AddSingleton<DuplicateSpotDetector>();
     builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
     builder.Services.AddSingleton<INodeManager, NodeManager>();
+    builder.Services.AddSingleton<IArxClientRegistry, ArxClientRegistry>();
     builder.Services.AddSingleton<IMessageDistributor, MessageDistributor>();
 
     // Commands (must be registered before ICommandRouter so router factory can resolve them)

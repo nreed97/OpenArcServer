@@ -10,9 +10,9 @@ Built through protocol analysis and compatibility research of the AR-Cluster Ser
 
 ## Status
 
-**Phase 2 — PCxx node peering complete and working.**
+**Phase 2 complete — PCxx node peering, ARx2 native client support, and RBN integration all working.**
 
-The server accepts telnet connections on port 7373 and is compatible with N1MM+, DXLab SpotCollector, Logger32, and any other AR-Cluster telnet client. It also accepts inbound PCxx node connections on port 7300 for peering with DX Spider, CC Cluster, and other PCxx-compatible cluster nodes.
+The server accepts telnet connections on port 7373, the AR-Cluster native ARx2 client protocol on the same port (auto-detected), and inbound PCxx node connections on port 7300 for peering with DX Spider, CC Cluster, and other PCxx-compatible cluster nodes.
 
 ```
 AR-Cluster Server
@@ -171,6 +171,23 @@ Peer → PC22^PEERCALL^
 Inbound: configure your peer node (e.g., DX Spider) to connect to your IP on port 7300.
 Outbound: add entries to `Peers` and OpenArcServer will connect and maintain the link automatically.
 
+### ARx2 Native Client Protocol
+
+The original AR-Cluster client (ArClient) uses a zlib-compressed XML protocol framed with `[Arx2]...[/Arx2]` delimiters. OpenArcServer auto-detects this on port 7373 — no separate port or configuration needed. ARx2 clients can post spots and receive spot broadcasts alongside standard telnet users.
+
+**Wire format:** `[Arx2]{zlib-compressed UTF-8 XML}[/Arx2]`
+
+**Confirmed message types:**
+
+| Direction | XML root element | Description |
+|-----------|-----------------|-------------|
+| Client → Server | `AB5K_Client_DxSpot` | Post a DX spot |
+| Client → Server | `AB5K_Client_LogIn` | Login with callsign |
+| Server → Client | `AB5K_Server_LogIn` | Login response |
+| Server → Client | `AB5K_Server_DxSpot` | Broadcast DX spot |
+
+Any unrecognised message type is logged in full (XML text) so new types can be identified and added as discovered.
+
 ### Reverse Beacon Network (RBN)
 
 Connect to the RBN telnet feed to receive CW/digital skimmer spots:
@@ -218,6 +235,7 @@ data/                              # Reference data files
 - [x] Node topology management (PC16-PC22, PC38, PC51)
 - [x] SH/N — show connected nodes
 - [x] Reverse Beacon Network (RBN) telnet feed integration
+- [x] ARx2 native client protocol (original AR-Cluster client support)
 
 ### Phase 3 — Advanced Features
 - [ ] DX spot filtering (band, mode, continent, prefix, CQ zone)

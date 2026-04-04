@@ -52,6 +52,8 @@ public sealed class CommandResponse
     public string? TargetCallsign { get; set; }
     /// <summary>Raw PCxx message to send to node peers (e.g. PC11 for DX spots).</summary>
     public string? PcxxMessage { get; set; }
+    /// <summary>ARx2 XML to send to ARx2 native clients when DistroType is ToAll.</summary>
+    public string? ArxMessage { get; set; }
 
     public void AddLine(string line) => Messages.Add(line);
     public void AddLines(IEnumerable<string> lines) => Messages.AddRange(lines);

@@ -40,6 +40,33 @@ public static class DxSpotFormatter
     }
 
     /// <summary>
+    /// Build an ARx2 AB5K_Server_DxSpot XML message for broadcast to native ARx2 clients.
+    /// Returns just the XML string — ArxFrame.Wrap() handles framing/compression.
+    /// </summary>
+    public static string FormatArxServerDxSpot(DxSpot spot)
+    {
+        var freq = spot.Freq.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+        var time = spot.Timestamp.ToUniversalTime().ToString("HHmm") + "Z";
+        var date = spot.Timestamp.ToUniversalTime().ToString("dd-MMM-yyyy");
+        // Simple XML build — avoids taking a dependency on the Arx project from Engine
+        return $"<AB5K_Server_DxSpot>" +
+               $"<Call>{Escape(spot.Call)}</Call>" +
+               $"<Freq>{freq}</Freq>" +
+               $"<Comment>{Escape(spot.Comment)}</Comment>" +
+               $"<Spotter>{Escape(spot.Spotter)}</Spotter>" +
+               $"<Time>{time}</Time>" +
+               $"<Date>{date}</Date>" +
+               $"<Band>{spot.Band.ToString(System.Globalization.CultureInfo.InvariantCulture)}</Band>" +
+               $"<Mode>{Escape(spot.Mode)}</Mode>" +
+               $"<Cty>{Escape(spot.Cty)}</Cty>" +
+               $"<Cont>{Escape(spot.Cont)}</Cont>" +
+               $"</AB5K_Server_DxSpot>";
+    }
+
+    private static string Escape(string v) => v
+        .Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
+    /// <summary>
     /// Build a PCxx PC11 DX spot message string.
     /// Format: PC11^freq^dx_call^comment^date^time^spotter^node^
     /// </summary>

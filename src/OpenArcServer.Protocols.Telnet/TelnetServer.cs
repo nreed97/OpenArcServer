@@ -6,6 +6,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenArcServer.Core.Configuration;
 using OpenArcServer.Core.Services;
+using OpenArcServer.Engine.Spots;
+using OpenArcServer.Protocols.Arx;
 
 namespace OpenArcServer.Protocols.Telnet;
 
@@ -58,25 +60,48 @@ public sealed class TelnetServer : BackgroundService
                     continue;
                 }
 
-                // Each connection runs independently — capture locals for the lambda
                 var capturedClient = client;
                 _ = Task.Run(async () =>
                 {
                     using var scope = _services.CreateScope();
                     var sp = scope.ServiceProvider;
 
-                    var connection = new TelnetClientConnection(
-                        capturedClient,
-                        sp.GetRequiredService<IConnectionManager>(),
-                        sp.GetRequiredService<ICommandRouter>(),
-                        sp.GetRequiredService<IMessageDistributor>(),
-                        sp.GetRequiredService<IUserRepository>(),
-                        sp.GetRequiredKeyedService<IFilterList>("connectblock"),
-                        sp.GetRequiredService<IOptions<TelnetOptions>>(),
-                        sp.GetRequiredService<IOptions<ServerOptions>>(),
-                        sp.GetRequiredService<ILogger<TelnetClientConnection>>());
+                    // Peek at the first bytes to detect the ARx2 native client protocol
+                    if (await IsArx2ClientAsync(capturedClient, stoppingToken))
+                    {
+                        _log.LogInformation("ARx2 protocol detected from {Endpoint}",
+                            capturedClient.Client.RemoteEndPoint);
 
-                    await connection.HandleAsync(stoppingToken);
+                        var arxConn = new ArxClientConnection(
+                            capturedClient,
+                            sp.GetRequiredService<IConnectionManager>(),
+                            sp.GetRequiredService<IArxClientRegistry>(),
+                            sp.GetRequiredService<IMessageDistributor>(),
+                            sp.GetRequiredService<IDxSpotRepository>(),
+                            sp.GetRequiredService<ICtyLookup>(),
+                            sp.GetRequiredService<IBandModeLookup>(),
+                            sp.GetRequiredService<DuplicateSpotDetector>(),
+                            sp.GetRequiredService<IOptions<ServerOptions>>(),
+                            sp.GetRequiredService<IOptions<SpotProcessingOptions>>(),
+                            sp.GetRequiredService<ILogger<ArxClientConnection>>());
+
+                        await arxConn.HandleAsync(stoppingToken);
+                    }
+                    else
+                    {
+                        var connection = new TelnetClientConnection(
+                            capturedClient,
+                            sp.GetRequiredService<IConnectionManager>(),
+                            sp.GetRequiredService<ICommandRouter>(),
+                            sp.GetRequiredService<IMessageDistributor>(),
+                            sp.GetRequiredService<IUserRepository>(),
+                            sp.GetRequiredKeyedService<IFilterList>("connectblock"),
+                            sp.GetRequiredService<IOptions<TelnetOptions>>(),
+                            sp.GetRequiredService<IOptions<ServerOptions>>(),
+                            sp.GetRequiredService<ILogger<TelnetClientConnection>>());
+
+                        await connection.HandleAsync(stoppingToken);
+                    }
                 }, stoppingToken);
             }
         }
@@ -84,6 +109,41 @@ public sealed class TelnetServer : BackgroundService
         {
             listener.Stop();
             _log.LogInformation("Telnet server stopped");
+        }
+    }
+
+    /// <summary>
+    /// Peek at the first 6 bytes of the stream without consuming them.
+    /// Returns true if the bytes match the ARx2 frame opener "[Arx2]".
+    /// Uses Socket.Peek so the data remains available for the connection handler.
+    /// </summary>
+    private static async Task<bool> IsArx2ClientAsync(TcpClient client, CancellationToken ct)
+    {
+        try
+        {
+            // Wait briefly for first bytes to arrive
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(3));
+
+            var socket = client.Client;
+            var peek = new byte[6];
+
+            // Poll until data is available or timeout
+            while (socket.Available < 6)
+            {
+                await Task.Delay(10, cts.Token);
+                if (!socket.Connected) return false;
+            }
+
+            // Peek (MSG_PEEK flag) — does not remove bytes from the buffer
+            int n = socket.Receive(peek, 0, 6, SocketFlags.Peek);
+            if (n < 6) return false;
+
+            return ArxFrame.StartsWithFrame(peek);
+        }
+        catch
+        {
+            return false;
         }
     }
 }

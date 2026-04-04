@@ -9,40 +9,51 @@ public sealed class MessageDistributor : IMessageDistributor
 {
     private readonly IConnectionManager _connections;
     private readonly INodeManager _nodes;
+    private readonly IArxClientRegistry _arxClients;
     private readonly ILogger<MessageDistributor> _log;
 
     public MessageDistributor(
         IConnectionManager connections,
         INodeManager nodes,
+        IArxClientRegistry arxClients,
         ILogger<MessageDistributor> log)
     {
         _connections = connections;
-        _nodes = nodes;
+        _nodes       = nodes;
+        _arxClients  = arxClients;
         _log = log;
     }
 
     public async Task DistributeAsync(CommandResponse response, UserSession sender, CancellationToken ct = default)
     {
-        if (response.Messages.Count == 0) return;
+        if (response.Messages.Count == 0 && response.ArxMessage is null) return;
 
-        var text = string.Join("\r\n", response.Messages);
-        if (!text.EndsWith("\r\n")) text += "\r\n";
+        var text = response.Messages.Count > 0
+            ? string.Join("\r\n", response.Messages) + "\r\n"
+            : string.Empty;
 
         switch (response.DistroType)
         {
             case Core.DistroType.ToRequester:
-                await SendToSessionAsync(sender, text, ct);
+                if (!string.IsNullOrEmpty(text))
+                    await SendToSessionAsync(sender, text, ct);
                 break;
 
             case Core.DistroType.ToAll:
-                // Telnet users + PCxx node raw messages (if set)
-                await SendToAllUsersAsync(text, ct);
+                // Telnet + ARx2 clients + PCxx nodes
+                if (!string.IsNullOrEmpty(text))
+                    await SendToAllUsersAsync(text, ct);
+                if (!string.IsNullOrEmpty(response.ArxMessage))
+                    await SendToAllArxClientsAsync(response.ArxMessage, ct);
                 if (!string.IsNullOrEmpty(response.PcxxMessage))
                     await SendToAllNodesAsync(response.PcxxMessage, ct);
                 break;
 
             case Core.DistroType.ToUsers:
-                await SendToAllUsersAsync(text, ct);
+                if (!string.IsNullOrEmpty(text))
+                    await SendToAllUsersAsync(text, ct);
+                if (!string.IsNullOrEmpty(response.ArxMessage))
+                    await SendToAllArxClientsAsync(response.ArxMessage, ct);
                 break;
 
             case Core.DistroType.ToPcxxNodes:
@@ -63,7 +74,8 @@ public sealed class MessageDistributor : IMessageDistributor
                 break;
 
             default:
-                await SendToSessionAsync(sender, text, ct);
+                if (!string.IsNullOrEmpty(text))
+                    await SendToSessionAsync(sender, text, ct);
                 break;
         }
     }
@@ -72,6 +84,14 @@ public sealed class MessageDistributor : IMessageDistributor
     {
         var sessions = _connections.GetConnectedUsers();
         await Task.WhenAll(sessions.Select(s => SendToSessionAsync(s, text, ct)));
+    }
+
+    private async Task SendToAllArxClientsAsync(string arxXml, CancellationToken ct)
+    {
+        var clients = _arxClients.GetAll();
+        await Task.WhenAll(clients
+            .Where(s => s.SendAsync is not null)
+            .Select(s => SendToSessionAsync(s, arxXml, ct)));
     }
 
     private async Task SendToAllNodesAsync(string pcxxMessage, CancellationToken ct)

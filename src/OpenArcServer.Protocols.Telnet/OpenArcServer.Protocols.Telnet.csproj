@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\OpenArcServer.Core\OpenArcServer.Core.csproj" />
     <ProjectReference Include="..\OpenArcServer.Engine\OpenArcServer.Engine.csproj" />
+    <ProjectReference Include="..\OpenArcServer.Protocols.Arx\OpenArcServer.Protocols.Arx.csproj" />
   </ItemGroup>
 
   <ItemGroup>
