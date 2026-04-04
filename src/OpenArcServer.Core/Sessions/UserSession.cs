@@ -22,7 +22,7 @@ public sealed class UserSession
     public int DxCount { get; set; } = 10;
 
     /// <summary>When false the user suppresses all skimmer/RBN spots.</summary>
-    public bool ReceiveSkimmer { get; set; } = true;
+    public bool ReceiveSkimmer { get; set; } = false;
 
     // Real-time spot filter (configured via SET/DX/BAND, MODE, CONT, CQ)
     public SpotFilter SpotFilter { get; } = new();
