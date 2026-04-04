@@ -8,10 +8,12 @@ namespace OpenArcServer.Engine.Commands;
 public sealed class ShowUsersCommand : IArcCommand
 {
     private readonly IConnectionManager _connections;
+    private readonly INodeManager _nodes;
 
-    public ShowUsersCommand(IConnectionManager connections)
+    public ShowUsersCommand(IConnectionManager connections, INodeManager nodes)
     {
         _connections = connections;
+        _nodes = nodes;
     }
 
     public Task ExecuteAsync(CommandContext context, CancellationToken ct = default)
@@ -19,7 +21,7 @@ public sealed class ShowUsersCommand : IArcCommand
         var users = _connections.GetConnectedUsers();
         var resp = context.Response;
 
-        resp.Messages.Add($"Nodes  - 0 connected");
+        resp.Messages.Add($"Nodes  - {_nodes.Count} connected");
         resp.Messages.Add($"Users  - {users.Count} connected");
         resp.Messages.Add(string.Empty);
 

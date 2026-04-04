@@ -40,6 +40,7 @@ try
     builder.Services.Configure<DataFileOptions>(builder.Configuration.GetSection("DataFiles"));
     builder.Services.Configure<SpotProcessingOptions>(builder.Configuration.GetSection("SpotProcessing"));
     builder.Services.Configure<PcxxOptions>(builder.Configuration.GetSection("Pcxx"));
+    builder.Services.Configure<RbnOptions>(builder.Configuration.GetSection("Rbn"));
 
     // Data layer
     builder.Services.AddSingleton<DatabaseInitializer>();
@@ -98,6 +99,7 @@ try
         sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<DxSpotCommand>>()));
     builder.Services.AddSingleton<ShowDxCommand>();
     builder.Services.AddSingleton<ShowUsersCommand>();
+    builder.Services.AddSingleton<ShowNodesCommand>();
     builder.Services.AddSingleton<ShowVersionCommand>();
     builder.Services.AddSingleton<ShowTimeCommand>();
     builder.Services.AddSingleton<ByeCommand>();
@@ -109,6 +111,7 @@ try
         router.Register("DX",          sp.GetRequiredService<DxSpotCommand>());
         router.Register("SH DX",       sp.GetRequiredService<ShowDxCommand>());
         router.Register("SH U",        sp.GetRequiredService<ShowUsersCommand>());
+        router.Register("SH N",        sp.GetRequiredService<ShowNodesCommand>());
         router.Register("SH VERSION",  sp.GetRequiredService<ShowVersionCommand>());
         router.Register("SH TIME",     sp.GetRequiredService<ShowTimeCommand>());
         router.Register("BYE",         sp.GetRequiredService<ByeCommand>());
@@ -119,8 +122,10 @@ try
     // Telnet server
     builder.Services.AddHostedService<TelnetServer>();
 
-    // PCxx node server
+    // PCxx node server (inbound) + outbound connector + RBN
     builder.Services.AddHostedService<PcxxServer>();
+    builder.Services.AddHostedService<PcxxOutboundConnector>();
+    builder.Services.AddHostedService<RbnClient>();
 
     // Background maintenance
     builder.Services.AddHostedService<MaintenanceService>();

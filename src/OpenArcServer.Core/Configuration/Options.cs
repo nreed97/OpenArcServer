@@ -55,6 +55,14 @@ public sealed class SpotProcessingOptions
     public int DuplicateWindowMinutes { get; set; } = 20;
 }
 
+public sealed class PcxxPeer
+{
+    public string Host { get; set; } = string.Empty;
+    public int Port { get; set; } = 7300;
+    /// <summary>Optional display label — used in logs before the handshake reveals the node callsign.</summary>
+    public string Label { get; set; } = string.Empty;
+}
+
 public sealed class PcxxOptions
 {
     public bool Enabled { get; set; } = false;
@@ -67,4 +75,16 @@ public sealed class PcxxOptions
     public bool IgnoreNodeUserProtocol { get; set; } = false;
     /// <summary>Log outbound node protocol messages (PC18, PC19, PC20, PC22 etc.).</summary>
     public bool LogOutboundNodeUser { get; set; } = false;
+    /// <summary>Outbound peer nodes to connect to.</summary>
+    public List<PcxxPeer> Peers { get; set; } = new();
+}
+
+public sealed class RbnOptions
+{
+    public bool Enabled { get; set; } = false;
+    public string Host { get; set; } = "telnet.reversebeacon.net";
+    public int Port { get; set; } = 7000;
+    /// <summary>Callsign to send to RBN on login.</summary>
+    public string Callsign { get; set; } = string.Empty;
+    public int ReconnectDelaySeconds { get; set; } = 30;
 }

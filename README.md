@@ -30,6 +30,7 @@ DX de W1AW     :   14025.5  K1JT          Great signal!                  1505Z
 | `DX <freq> <call> [comment]` | Post a DX spot (broadcast to all users) |
 | `SH/DX [n] [call]` | Show last n spots, optionally filtered by callsign |
 | `SH/U` | Show connected users |
+| `SH/N` | Show connected cluster nodes |
 | `SH/VERSION` | Show server version |
 | `SH/TIME` | Show current UTC time |
 | `HELP` | List available commands |
@@ -130,14 +131,23 @@ OpenArcServer can accept inbound connections from other DX cluster nodes using t
 | PC38 | Outbound | Init start response |
 | PC51 | Both | Ping/pong keepalive |
 
-**Handshake sequence** (peer connects to us):
+**Inbound handshake** (peer connects to us):
 ```
-Peer → PC18^PEERNODE^
-Us   → PC38^OURNODECALL^
-Us   → PC19^1^node1^port^ver^^us^  (one per known node)
+Us   → PC18^OURNODECALL^
+Peer → PC38^software^PEERCALL^version^
+Us   → PC19^...nodes...^
 Us   → PC20^OURNODECALL^
 Us   → PC22^OURNODECALL^
-Us   → PC16^callsign^OURNODECALL^^^  (one per connected user)
+Us   → PC16^user^OURNODECALL^^^  (one per connected user)
+```
+
+**Outbound handshake** (we connect to peer):
+```
+Peer → PC18^PEERCALL^
+Us   → PC38^OpenArcServer^OURNODECALL^version^
+Peer → PC19^...nodes...^
+Peer → PC20^PEERCALL^
+Peer → PC22^PEERCALL^
 ```
 
 **Enable PCxx peering** in `appsettings.json`:
@@ -150,12 +160,34 @@ Us   → PC16^callsign^OURNODECALL^^^  (one per connected user)
     "BindAddress": "0.0.0.0",
     "MaxNodeConnections": 50,
     "PingIntervalSeconds": 300,
-    "NodeTimeoutMinutes": 30
+    "NodeTimeoutMinutes": 30,
+    "Peers": [
+      { "Host": "dx.somenode.net", "Port": 7300, "Label": "W1AW-2" }
+    ]
   }
 }
 ```
 
-Then configure your peer node (e.g., DX Spider) to connect to your server's IP on port 7300.
+Inbound: configure your peer node (e.g., DX Spider) to connect to your IP on port 7300.
+Outbound: add entries to `Peers` and OpenArcServer will connect and maintain the link automatically.
+
+### Reverse Beacon Network (RBN)
+
+Connect to the RBN telnet feed to receive CW/digital skimmer spots:
+
+```json
+{
+  "Rbn": {
+    "Enabled": true,
+    "Host": "telnet.reversebeacon.net",
+    "Port": 7000,
+    "Callsign": "W1AW",
+    "ReconnectDelaySeconds": 30
+  }
+}
+```
+
+RBN spots are inserted into the database and broadcast to all connected telnet users in standard spot format. The `Callsign` field is used to log in to the RBN server.
 
 ## Solution Structure
 
@@ -180,12 +212,12 @@ data/                              # Reference data files
 ## Roadmap
 
 ### Phase 2 — Networking ✓
-- [x] PCxx protocol for DX Spider node peering
-- [x] Spot/announcement distribution to peer nodes
+- [x] PCxx inbound: accept connections from DX Spider, CC Cluster, etc.
+- [x] PCxx outbound: connect TO configured peer nodes with auto-reconnect
+- [x] Spot/announcement distribution to peer nodes (PC11, PC12)
 - [x] Node topology management (PC16-PC22, PC38, PC51)
-- [ ] Outbound connections (connect TO peer nodes, not just accept)
-- [ ] SH/N (show nodes) command
-- [ ] Reverse Beacon Network (RBN) integration
+- [x] SH/N — show connected nodes
+- [x] Reverse Beacon Network (RBN) telnet feed integration
 
 ### Phase 3 — Advanced Features
 - [ ] DX spot filtering (band, mode, continent, prefix, CQ zone)

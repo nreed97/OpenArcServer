@@ -24,6 +24,7 @@ public sealed class PcxxClientConnection
     private readonly ServerOptions _serverOpts;
     private readonly PcxxOptions _opts;
     private readonly ILogger<PcxxClientConnection> _log;
+    private readonly bool _isOutbound;
 
     private static readonly Encoding _enc = Encoding.UTF8;
 
@@ -38,7 +39,8 @@ public sealed class PcxxClientConnection
         DuplicateSpotDetector dupeDetector,
         IOptions<ServerOptions> serverOpts,
         IOptions<PcxxOptions> opts,
-        ILogger<PcxxClientConnection> log)
+        ILogger<PcxxClientConnection> log,
+        bool isOutbound = false)
     {
         _client = client;
         _nodes = nodes;
@@ -51,12 +53,14 @@ public sealed class PcxxClientConnection
         _serverOpts = serverOpts.Value;
         _opts = opts.Value;
         _log = log;
+        _isOutbound = isOutbound;
     }
 
     public async Task HandleAsync(CancellationToken ct)
     {
         var endpoint = _client.Client.RemoteEndPoint?.ToString() ?? "unknown";
-        _log.LogInformation("PCxx connection from {Endpoint}", endpoint);
+        _log.LogInformation("PCxx {Direction} connection {Endpoint}",
+            _isOutbound ? "outbound to" : "inbound from", endpoint);
 
         var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var session = new UserSession
@@ -77,13 +81,21 @@ public sealed class PcxxClientConnection
 
         try
         {
-            // Send PC18 immediately to start handshake
-            var pc18 = PcxxMessage.Pc18(_serverOpts.NodeCallsign);
-            await session.SendAsync(pc18, cts.Token);
-            session.ConnectionState = ConnectionState.CallsignRequest; // waiting for PC38
+            if (_isOutbound)
+            {
+                // Outbound: wait for peer to send PC18 first, then we respond PC38
+                session.ConnectionState = ConnectionState.CallsignRequest;
+            }
+            else
+            {
+                // Inbound: we initiate handshake with PC18
+                var pc18 = PcxxMessage.Pc18(_serverOpts.NodeCallsign);
+                await session.SendAsync(pc18, cts.Token);
+                session.ConnectionState = ConnectionState.CallsignRequest;
 
-            if (_opts.LogOutboundNodeUser)
-                _log.LogInformation("PCxx TX → {Endpoint}: {Msg}", endpoint, pc18.TrimEnd());
+                if (_opts.LogOutboundNodeUser)
+                    _log.LogInformation("PCxx TX → {Endpoint}: {Msg}", endpoint, pc18.TrimEnd());
+            }
 
             await ReadLoopAsync(stream, session, cts.Token);
         }
@@ -162,13 +174,16 @@ public sealed class PcxxClientConnection
 
         switch (msgNum)
         {
-            case 38: await HandlePc38Async(session, fields, ct); break;
+            case 18: await HandlePc18Async(session, fields, ct); break; // outbound: peer sends PC18 to us
+            case 38: await HandlePc38Async(session, fields, ct); break; // inbound: peer responds PC38
             case 11: await HandlePc11Async(session, fields, ct); break;
             case 12: await HandlePc12Async(session, fields, ct); break;
             case 16: HandlePc16(session, fields); break;
             case 17: HandlePc17(session, fields); break;
             case 19: await HandlePc19Async(session, fields, ct); break;
+            case 20: HandlePc20(session, fields); break;
             case 21: HandlePc21(session, fields); break;
+            case 22: HandlePc22(session, fields); break;
             case 51: await HandlePc51Async(session, fields, ct); break;
             default:
                 _log.LogDebug("PCxx unhandled PC{Num} from {Node}", msgNum, session.Callsign);
@@ -176,7 +191,39 @@ public sealed class PcxxClientConnection
         }
     }
 
-    // ── PC38 — Init Start (response to our PC18) ───────────────────────────
+    // ── PC18 — Init Request (outbound: peer sends this to us after we connect) ─
+    private async Task HandlePc18Async(UserSession session, string[] fields, CancellationToken ct)
+    {
+        if (!_isOutbound) return; // inbound connections don't receive PC18
+
+        // PC18^node_call^  — peer is telling us their callsign
+        var nodeCall = (fields.ElementAtOrDefault(1) ?? string.Empty).ToUpperInvariant().Trim();
+        if (string.IsNullOrEmpty(nodeCall))
+            nodeCall = session.RemoteEndpoint;
+
+        // Respond with PC38 (our software name, our callsign, our version)
+        var pc38 = PcxxMessage.Pc38("OpenArcServer", _serverOpts.NodeCallsign, _serverOpts.Version);
+        await session.SendAsync(pc38, ct);
+
+        // Register the node now (handshake finishes when we receive PC22 from them)
+        session.Callsign = nodeCall;
+        session.ConnectionState = ConnectionState.Connected;
+
+        var node = new NodeRecord
+        {
+            Callsign = nodeCall,
+            Software = "PCxx",
+            Version = string.Empty,
+            Port = _opts.Port,
+            RemoteEndpoint = session.RemoteEndpoint,
+        };
+
+        _nodes.AddNode(node, session);
+        _connections.AddSession(session);
+        _log.LogInformation("PCxx outbound: received PC18 from {Callsign}, sent PC38", nodeCall);
+    }
+
+    // ── PC38 — Init Start (inbound: response to our PC18) ─────────────────
     private async Task HandlePc38Async(UserSession session, string[] fields, CancellationToken ct)
     {
         // PC38^software^node_call^version^
@@ -388,6 +435,25 @@ public sealed class PcxxClientConnection
         await BroadcastToNodesAsync(raw, session.Callsign, ct);
 
         _log.LogDebug("PCxx PC19 forwarded from {Node}", session.Callsign);
+    }
+
+    // ── PC20 — Init Turnaround ─────────────────────────────────────────────
+    private void HandlePc20(UserSession session, string[] fields)
+    {
+        // Peer signals end of their node list; no action needed, just log
+        _log.LogDebug("PCxx PC20 turnaround from {Node}", session.Callsign);
+    }
+
+    // ── PC22 — Init Complete ───────────────────────────────────────────────
+    private void HandlePc22(UserSession session, string[] fields)
+    {
+        // Handshake complete (outbound path: peer sent PC19/PC20/PC22 to us)
+        var node = _nodes.FindNode(session.Callsign);
+        if (node is not null)
+        {
+            node.HandshakeComplete = true;
+            _log.LogInformation("PCxx outbound handshake complete with {Callsign}", session.Callsign);
+        }
     }
 
     // ── PC21 — Delete Node ─────────────────────────────────────────────────
