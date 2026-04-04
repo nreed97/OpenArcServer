@@ -2,7 +2,7 @@
 
 ## Context
 
-The original AR-Cluster Server by AB5K (SK) has been reverse-engineered from its MSI installer. We have 682 decompiled C# source files, full protocol documentation, and a GitHub repo at `nreed97/OpenArcServer`. The goal is to build a cross-platform, open-source replacement compatible with all existing DX cluster telnet clients (N1MM+, DXLab, Logger32, etc.) and PCxx-protocol cluster nodes.
+The original AR-Cluster Server by AB5K (SK) is no longer maintained. Through protocol analysis and compatibility research of the AR-Cluster ecosystem, we have full protocol documentation and a GitHub repo at `nreed97/OpenArcServer`. The goal is to build a cross-platform, open-source replacement compatible with all existing DX cluster telnet clients (N1MM+, DXLab, Logger32, etc.) and PCxx-protocol cluster nodes. This is a clean-room implementation sharing no code with the original.
 
 This plan covers **Phase 1 (MVP)**: a working telnet DX cluster server that can accept client connections, handle DX spot posting/querying, and basic user commands.
 
@@ -23,8 +23,8 @@ S:/vibe/DXCluster/OpenArcServer/
     OpenArcServer.Engine.Tests/      # Command, parser, formatter, dupe detector tests
     OpenArcServer.Data.Tests/        # Repository and file parser tests
     OpenArcServer.Integration.Tests/ # End-to-end telnet client tests
-  reference/                         # (existing) decompiled code + configs
-  docs/                              # (existing) reverse engineering docs
+  reference/                         # (existing) protocol reference material
+  docs/                              # (existing) protocol & compatibility research docs
   data/                              # Runtime data files (CTY.DAT, BandMode.dat, etc.)
 ```
 
@@ -239,10 +239,10 @@ Copy reference data files to `data/` directory:
 
 ## Critical Reference Files
 
-- `reference/decompiled/ArcShared/ArcShared/CtyInfo.cs` - CTY.DAT field positions (line 170-181)
-- `reference/decompiled/ArcEngine/ArcEngine.ArcCmds.UserProcessor/UserCmdLookup.cs` - Command abbreviation expansion
-- `reference/decompiled/ArcEngine/ArcEngine.ArcCmds.Dx/DxSpotBase.cs` - DX spot processing and output format
-- `reference/decompiled/ArcEngine/ArcEngine.ArcCmds.Dx/DxSpotPc11.cs` - PC11 message parsing
-- `reference/decompiled/ArcEngine/ArcEngine.ArcCmds.Publish/Publisher.cs` - Message distribution
+- `reference/ArcShared/ArcShared/CtyInfo.cs` - CTY.DAT field positions (line 170-181)
+- `reference/ArcEngine/ArcEngine.ArcCmds.UserProcessor/UserCmdLookup.cs` - Command abbreviation expansion
+- `reference/ArcEngine/ArcEngine.ArcCmds.Dx/DxSpotBase.cs` - DX spot processing and output format
+- `reference/ArcEngine/ArcEngine.ArcCmds.Dx/DxSpotPc11.cs` - PC11 message parsing
+- `reference/ArcEngine/ArcEngine.ArcCmds.Publish/Publisher.cs` - Message distribution
 - `reference/config/ArcServerDi.xml` - All command registrations
 - `reference/data/BandMode.dat` - Band/mode frequency ranges

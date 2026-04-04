@@ -1,10 +1,10 @@
-# ArcServer (AR-Cluster Server) - Reverse Engineering Analysis
+# ArcServer (AR-Cluster Server) - Protocol & Compatibility Research
 
 ## Overview
 
-**AR-Cluster Server** (ArcServer) was a DX cluster server application written by **Terry Dawson, AB5K** (SK - Silent Key). It was a .NET 4.0 Windows application using SQL Server Compact Edition 3.5 for data persistence, with Spring.NET for dependency injection. The last known version is **6.1** (build 5123), copyrighted 1998-2013.
+**AR-Cluster Server** (ArcServer) was a DX cluster server application written by **Terry Gerdes, AB5K** (SK - Silent Key). It was a .NET 4.0 Windows application using SQL Server Compact Edition 3.5 for data persistence, with Spring.NET for dependency injection. The last known version is **6.1** (build 5123), copyrighted 1998-2013.
 
-This document captures the complete findings from reverse engineering the `ArcServerSetup.msi` installer (dated January 2014) to enable building a compatible, cross-platform open-source replacement.
+This document captures protocol specifications, data formats, and architectural observations gathered through analysis of the AR-Cluster Server ecosystem. OpenArcServer is an independent, clean-room implementation — it shares no code with the original software.
 
 ---
 
@@ -438,7 +438,7 @@ The `Publisher.Process()` method handles serialization into the appropriate wire
 
 ---
 
-## 9. Key Observations for Reimplementation
+## 9. Key Observations for Compatible Implementation
 
 ### Must Support for Client Compatibility
 1. **Telnet interface** on configurable port - this is how 99% of existing clients connect
@@ -471,6 +471,6 @@ The `Publisher.Process()` method handles serialization into the appropriate wire
 - **AR-Cluster 4**: Legacy version, still had command compatibility
 - **AR-Cluster 6 (ArcServer 6.x)**: Major rewrite in .NET, introduced ARx XML protocol
 - **Version 6.1 (build 5123)**: Last known release, January 2014
-- **Author**: Terry Dawson, AB5K (Silent Key)
+- **Author**: Terry Gerdes, AB5K (Silent Key)
 - **Copyright**: 1998-2013
 - **MSI Product GUID**: `{14C97260-69EE-48C4-B0EB-90C977C6CE0D}`
