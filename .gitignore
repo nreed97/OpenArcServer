@@ -41,6 +41,14 @@ desktop.ini
 *.sdf
 *.mdb
 
+## SQLite runtime database
+*.db
+*.db-shm
+*.db-wal
+
+## Logs
+logs/
+
 ## Credentials
 appsettings.Development.json
 appsettings.Local.json
