@@ -247,10 +247,43 @@ public sealed class TelnetClientConnection
         {
             var bytes = lineSeq.ToArray();
             int len = bytes.Length;
+
+            // Strip trailing CR/LF
             while (len > 0 && (bytes[len - 1] == '\r' || bytes[len - 1] == '\n'))
                 len--;
 
-            line   = Encoding.UTF8.GetString(bytes, 0, len);
+            // Strip telnet IAC sequences (RFC 854) and ASCII control characters.
+            // IAC (0xFF) introduces a 2-byte command or 3-byte command+option sequence.
+            // Telnet clients send these negotiation bytes even to servers that ignore them,
+            // and they arrive mixed in with user input if not filtered here.
+            int cleanLen = 0;
+            int i = 0;
+            while (i < len)
+            {
+                byte b = bytes[i];
+                if (b == 0xFF) // IAC — skip 2 or 3-byte sequence
+                {
+                    i++;
+                    if (i < len)
+                    {
+                        byte cmd = bytes[i++]; // command byte
+                        // WILL(251)/WONT(252)/DO(253)/DONT(254) are followed by an option byte
+                        if (cmd >= 251 && cmd <= 254 && i < len)
+                            i++; // skip option byte
+                    }
+                }
+                else if (b >= 32) // Printable ASCII or UTF-8 multi-byte continuation
+                {
+                    bytes[cleanLen++] = b;
+                    i++;
+                }
+                else // Control character < 32 (NUL, BS, etc.) — discard
+                {
+                    i++;
+                }
+            }
+
+            line   = Encoding.UTF8.GetString(bytes, 0, cleanLen);
             buffer = buffer.Slice(reader.Position);
             return true;
         }
