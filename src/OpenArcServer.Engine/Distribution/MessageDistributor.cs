@@ -3,11 +3,15 @@ using OpenArcServer.Core.Commands;
 using OpenArcServer.Core.Models;
 using OpenArcServer.Core.Services;
 using OpenArcServer.Core.Sessions;
+using Prometheus;
 
 namespace OpenArcServer.Engine.Distribution;
 
 public sealed class MessageDistributor : IMessageDistributor
 {
+    private static readonly Counter SpotsDistributedTotal = Metrics.CreateCounter(
+        "openarcserver_spots_distributed_total",
+        "Total DX spots distributed to all users/nodes");
     private readonly IConnectionManager _connections;
     private readonly INodeManager _nodes;
     private readonly IArxClientRegistry _arxClients;
@@ -43,7 +47,10 @@ public sealed class MessageDistributor : IMessageDistributor
             case Core.DistroType.ToAll:
                 // Telnet + ARx2 clients + PCxx nodes
                 if (!string.IsNullOrEmpty(text))
+                {
+                    SpotsDistributedTotal.Inc();
                     await SendToAllUsersAsync(text, response.SpotData, ct);
+                }
                 if (!string.IsNullOrEmpty(response.ArxMessage))
                     await SendToAllArxClientsAsync(response.ArxMessage, ct);
                 if (!string.IsNullOrEmpty(response.PcxxMessage))

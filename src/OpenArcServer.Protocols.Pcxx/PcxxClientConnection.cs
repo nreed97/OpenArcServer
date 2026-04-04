@@ -8,11 +8,16 @@ using OpenArcServer.Core.Models;
 using OpenArcServer.Core.Services;
 using OpenArcServer.Core.Sessions;
 using OpenArcServer.Engine.Spots;
+using Prometheus;
 
 namespace OpenArcServer.Protocols.Pcxx;
 
 public sealed class PcxxClientConnection
 {
+    private static readonly Counter DxSpotsTotal = Metrics.CreateCounter(
+        "openarcserver_dx_spots_total",
+        "Total DX spots received",
+        new CounterConfiguration { LabelNames = new[] { "source" } });
     private readonly TcpClient _client;
     private readonly INodeManager _nodes;
     private readonly IConnectionManager _connections;
@@ -360,6 +365,7 @@ public sealed class PcxxClientConnection
         };
 
         await _spots.InsertAsync(spot, ct);
+        DxSpotsTotal.WithLabels("pcxx").Inc();
 
         if (!isDupe)
         {

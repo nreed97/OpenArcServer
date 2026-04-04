@@ -4,11 +4,15 @@ using Microsoft.Extensions.Options;
 using OpenArcServer.Core.Configuration;
 using OpenArcServer.Core.Services;
 using OpenArcServer.Engine.Spots;
+using Prometheus;
 
 namespace OpenArcServer.Server.Services;
 
 public sealed class MaintenanceService : BackgroundService
 {
+    private static readonly Gauge DbSpotsTotal = Metrics.CreateGauge(
+        "openarcserver_db_spots_total",
+        "Total DX spots currently stored in the database");
     private readonly IDxSpotRepository _spots;
     private readonly IUserRepository _users;
     private readonly IWwvRepository _wwv;
@@ -67,6 +71,10 @@ public sealed class MaintenanceService : BackgroundService
 
             // Cleanup dupe cache
             _dupeDetector.Cleanup();
+
+            // Update DB spot count metric
+            var spotCount = await _spots.CountAsync(ct);
+            DbSpotsTotal.Set(spotCount);
 
             _log.LogInformation("Maintenance complete");
         }

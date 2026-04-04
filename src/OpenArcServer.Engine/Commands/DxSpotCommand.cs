@@ -6,6 +6,7 @@ using OpenArcServer.Core.Configuration;
 using OpenArcServer.Core.Models;
 using OpenArcServer.Core.Services;
 using OpenArcServer.Engine.Spots;
+using Prometheus;
 
 namespace OpenArcServer.Engine.Commands;
 
@@ -15,6 +16,14 @@ namespace OpenArcServer.Engine.Commands;
 /// </summary>
 public sealed class DxSpotCommand : IArcCommand
 {
+    private static readonly Counter DxSpotsTotal = Metrics.CreateCounter(
+        "openarcserver_dx_spots_total",
+        "Total DX spots received",
+        new CounterConfiguration { LabelNames = new[] { "source" } });
+
+    private static readonly Counter DxSpotsDupesTotal = Metrics.CreateCounter(
+        "openarcserver_dx_spots_dupes_total",
+        "Total duplicate DX spots detected");
     private readonly IDxSpotRepository _spots;
     private readonly ICtyLookup _cty;
     private readonly IBandModeLookup _bandMode;
@@ -133,6 +142,9 @@ public sealed class DxSpotCommand : IArcCommand
         await _spots.InsertAsync(spot, ct);
         _log.LogInformation("DX spot: {Spotter} -> {Call} @ {Freq} kHz [{Band}]",
             session.Callsign, call, freq, band);
+
+        DxSpotsTotal.WithLabels("telnet").Inc();
+        if (isDupe) DxSpotsDupesTotal.Inc();
 
         resp.Messages.Add(DxSpotFormatter.Format(spot));
         resp.DistroType = isDupe ? DistroType.ToRequester : DistroType.ToAll;
