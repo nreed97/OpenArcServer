@@ -56,7 +56,7 @@ public sealed class MessageDistributor : IMessageDistributor
                     await SendToAllUsersAsync(text, response.SpotData, ct);
                 }
                 if (!string.IsNullOrEmpty(response.ArxMessage))
-                    await SendToAllArxClientsAsync(response.ArxMessage, ct);
+                    await SendToAllArxClientsAsync(response.ArxMessage, response.SpotData, ct);
                 if (!string.IsNullOrEmpty(response.PcxxMessage))
                     await SendToAllNodesAsync(response.PcxxMessage, ct);
                 // WebSocket: send structured JSON if this is a DX spot, otherwise text
@@ -70,7 +70,12 @@ public sealed class MessageDistributor : IMessageDistributor
                 if (!string.IsNullOrEmpty(text))
                     await SendToAllUsersAsync(text, response.SpotData, ct);
                 if (!string.IsNullOrEmpty(response.ArxMessage))
-                    await SendToAllArxClientsAsync(response.ArxMessage, ct);
+                    await SendToAllArxClientsAsync(response.ArxMessage, response.SpotData, ct);
+                // WebSocket clients also receive user-facing spots
+                if (!string.IsNullOrEmpty(text) && response.SpotData is { } usersSpot)
+                    await SendToAllWebSocketClientsJsonAsync(usersSpot, ct);
+                else if (!string.IsNullOrEmpty(text))
+                    await SendToAllWebSocketClientsTextAsync(text, ct);
                 break;
 
             case Core.DistroType.ToPcxxNodes:
@@ -109,10 +114,15 @@ public sealed class MessageDistributor : IMessageDistributor
         await Task.WhenAll(targets.Select(s => SendToSessionAsync(s, text, ct)));
     }
 
-    private async Task SendToAllArxClientsAsync(string arxXml, CancellationToken ct)
+    private async Task SendToAllArxClientsAsync(string arxXml, DxSpot? spotData, CancellationToken ct)
     {
         var clients = _arxClients.GetAll();
-        await Task.WhenAll(clients
+        IEnumerable<UserSession> targets = spotData is null
+            ? clients
+            : clients.Where(s =>
+                s.SpotFilter.Matches(spotData) &&
+                (s.ReceiveSkimmer || !spotData.Skimmer));
+        await Task.WhenAll(targets
             .Where(s => s.SendAsync is not null)
             .Select(s => SendToSessionAsync(s, arxXml, ct)));
     }

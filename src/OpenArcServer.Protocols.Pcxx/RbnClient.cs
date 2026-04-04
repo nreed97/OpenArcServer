@@ -221,7 +221,8 @@ public sealed class RbnClient : BackgroundService
             var response = new CommandResponse
             {
                 DistroType = DistroType.ToUsers,
-                MsgType = MsgType.Dx,
+                MsgType    = MsgType.Dx,
+                SpotData   = spot,
             };
             response.Messages.Add(formatted);
 
