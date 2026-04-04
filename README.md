@@ -172,7 +172,7 @@ tests/
   OpenArcServer.Data.Tests/
   OpenArcServer.Integration.Tests/
 docs/
-  REVERSE-ENGINEERING.md           # Protocol specs and compatibility research
+  PROTOCOL-REFERENCE.md           # Protocol specs and compatibility research
   IMPLEMENTATION-PLAN.md           # Phase 1 build plan
 data/                              # Reference data files
 ```
@@ -215,7 +215,7 @@ Contributions welcome! Key areas:
 
 ## Protocol & Architecture Reference
 
-See [docs/REVERSE-ENGINEERING.md](docs/REVERSE-ENGINEERING.md) for protocol specifications, database schema, networking architecture, and data file format analysis used to build compatibility with existing AR-Cluster clients.
+See [docs/PROTOCOL-REFERENCE.md](docs/PROTOCOL-REFERENCE.md) for protocol specifications, database schema, networking architecture, and data file format analysis used to build compatibility with existing AR-Cluster clients.
 
 ## License
 
