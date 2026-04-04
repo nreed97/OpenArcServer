@@ -89,6 +89,13 @@ public sealed class RbnOptions
     public int ReconnectDelaySeconds { get; set; } = 30;
 }
 
+public sealed class WebSocketOptions
+{
+    public bool Enabled { get; set; } = true;
+    public int Port { get; set; } = 7374;
+    public string BindAddress { get; set; } = "0.0.0.0";
+}
+
 /// <summary>
 /// Options for the ARx2 native client server (AB5K AR-Cluster native protocol).
 /// Listens on a separate port (default 3608). Server sends AB5K_LoginRqst on connect;

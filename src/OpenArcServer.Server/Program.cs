@@ -12,6 +12,7 @@ using OpenArcServer.Engine.Spots;
 using OpenArcServer.Protocols.Arx;
 using OpenArcServer.Protocols.Pcxx;
 using OpenArcServer.Protocols.Telnet;
+using OpenArcServer.Protocols.WebSocket;
 using OpenArcServer.Server.Services;
 using Serilog;
 
@@ -49,6 +50,7 @@ try
     builder.Services.Configure<PcxxOptions>(builder.Configuration.GetSection("Pcxx"));
     builder.Services.Configure<RbnOptions>(builder.Configuration.GetSection("Rbn"));
     builder.Services.Configure<ArxServerOptions>(builder.Configuration.GetSection("Arx"));
+    builder.Services.Configure<WebSocketOptions>(builder.Configuration.GetSection("WebSocket"));
 
     // Data layer
     builder.Services.AddSingleton<DatabaseInitializer>();
@@ -98,6 +100,7 @@ try
     builder.Services.AddSingleton<INodeManager, NodeManager>();
     builder.Services.AddSingleton<IArxClientRegistry, ArxClientRegistry>();
     builder.Services.AddSingleton<IArxMessageProcessor, ArxMessageProcessor>();
+    builder.Services.AddSingleton<IWebSocketClientRegistry, WebSocketClientRegistry>();
     builder.Services.AddSingleton<IMessageDistributor, MessageDistributor>();
     builder.Services.AddSingleton<BuddyAlertService>();
 
@@ -207,6 +210,9 @@ try
     builder.Services.AddHostedService<PcxxServer>();
     builder.Services.AddHostedService<PcxxOutboundConnector>();
     builder.Services.AddHostedService<RbnClient>();
+
+    // WebSocket server
+    builder.Services.AddHostedService<WebSocketServer>();
 
     // Background maintenance
     builder.Services.AddHostedService<MaintenanceService>();

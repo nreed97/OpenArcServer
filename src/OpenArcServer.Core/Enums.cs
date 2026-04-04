@@ -23,7 +23,8 @@ public enum ConnectStateType
     ArxNode,
     ArxClient,
     AgwBpqUser,
-    RcvOnly
+    RcvOnly,
+    WebSocketUser
 }
 
 public enum ConnectionState

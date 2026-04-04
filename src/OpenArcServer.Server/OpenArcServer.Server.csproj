@@ -7,6 +7,7 @@
     <ProjectReference Include="..\OpenArcServer.Protocols.Telnet\OpenArcServer.Protocols.Telnet.csproj" />
     <ProjectReference Include="..\OpenArcServer.Protocols.Pcxx\OpenArcServer.Protocols.Pcxx.csproj" />
     <ProjectReference Include="..\OpenArcServer.Protocols.Arx\OpenArcServer.Protocols.Arx.csproj" />
+    <ProjectReference Include="..\OpenArcServer.Protocols.WebSocket\OpenArcServer.Protocols.WebSocket.csproj" />
   </ItemGroup>
 
   <ItemGroup>

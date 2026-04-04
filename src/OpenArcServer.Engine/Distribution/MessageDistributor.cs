@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using OpenArcServer.Core.Commands;
 using OpenArcServer.Core.Models;
@@ -15,17 +16,20 @@ public sealed class MessageDistributor : IMessageDistributor
     private readonly IConnectionManager _connections;
     private readonly INodeManager _nodes;
     private readonly IArxClientRegistry _arxClients;
+    private readonly IWebSocketClientRegistry _wsClients;
     private readonly ILogger<MessageDistributor> _log;
 
     public MessageDistributor(
         IConnectionManager connections,
         INodeManager nodes,
         IArxClientRegistry arxClients,
+        IWebSocketClientRegistry wsClients,
         ILogger<MessageDistributor> log)
     {
         _connections = connections;
         _nodes       = nodes;
         _arxClients  = arxClients;
+        _wsClients   = wsClients;
         _log = log;
     }
 
@@ -45,7 +49,7 @@ public sealed class MessageDistributor : IMessageDistributor
                 break;
 
             case Core.DistroType.ToAll:
-                // Telnet + ARx2 clients + PCxx nodes
+                // Telnet + ARx2 clients + PCxx nodes + WebSocket clients
                 if (!string.IsNullOrEmpty(text))
                 {
                     SpotsDistributedTotal.Inc();
@@ -55,6 +59,11 @@ public sealed class MessageDistributor : IMessageDistributor
                     await SendToAllArxClientsAsync(response.ArxMessage, ct);
                 if (!string.IsNullOrEmpty(response.PcxxMessage))
                     await SendToAllNodesAsync(response.PcxxMessage, ct);
+                // WebSocket: send structured JSON if this is a DX spot, otherwise text
+                if (!string.IsNullOrEmpty(text) && response.SpotData is { } spot)
+                    await SendToAllWebSocketClientsJsonAsync(spot, ct);
+                else if (!string.IsNullOrEmpty(text))
+                    await SendToAllWebSocketClientsTextAsync(text, ct);
                 break;
 
             case Core.DistroType.ToUsers:
@@ -116,6 +125,33 @@ public sealed class MessageDistributor : IMessageDistributor
             .Where(s => s?.SendAsync is not null)
             .Select(s => SendToSessionAsync(s!, pcxxMessage, ct));
         await Task.WhenAll(tasks);
+    }
+
+    private async Task SendToAllWebSocketClientsJsonAsync(DxSpot spot, CancellationToken ct)
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            type      = "dx_spot",
+            call      = spot.Call,
+            spotter   = spot.Spotter,
+            freq      = spot.Freq,
+            band      = spot.Band,
+            mode      = spot.Mode,
+            comment   = spot.Comment,
+            cont      = spot.Cont,
+            cqZone    = spot.CqZone,
+            skimmer   = spot.Skimmer,
+            timestamp = spot.Timestamp.ToString("O"),
+        });
+        var clients = _wsClients.GetAll();
+        var targets = clients.Where(s => s.SpotFilter.Matches(spot) && (s.ReceiveSkimmer || !spot.Skimmer));
+        await Task.WhenAll(targets.Where(s => s.SendAsync is not null).Select(s => SendToSessionAsync(s, json, ct)));
+    }
+
+    private async Task SendToAllWebSocketClientsTextAsync(string text, CancellationToken ct)
+    {
+        var clients = _wsClients.GetAll();
+        await Task.WhenAll(clients.Where(s => s.SendAsync is not null).Select(s => SendToSessionAsync(s, text, ct)));
     }
 
     private async Task SendToSessionAsync(UserSession session, string text, CancellationToken ct)
