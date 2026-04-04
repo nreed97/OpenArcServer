@@ -22,7 +22,13 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
-    var builder = Host.CreateApplicationBuilder(args);
+    // Pin content root to the binary's directory so appsettings.json is found
+    // regardless of which directory `dotnet run` is invoked from.
+    var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+    {
+        Args = args,
+        ContentRootPath = AppContext.BaseDirectory,
+    });
 
     // Serilog
     builder.Services.AddSerilog((services, lc) => lc
