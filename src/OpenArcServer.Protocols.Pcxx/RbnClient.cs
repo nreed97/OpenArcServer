@@ -120,16 +120,6 @@ public sealed class RbnClient : BackgroundService
                     var line = text[start..i].TrimEnd('\r');
                     start = i + 1;
 
-                    if (!loginSent && line.Contains("call", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Respond to login prompt with our callsign
-                        var login = enc.GetBytes(_opts.Callsign + "\r\n");
-                        await stream.WriteAsync(login, ct);
-                        loginSent = true;
-                        _log.LogInformation("RBN client logged in as {Callsign}", _opts.Callsign);
-                        continue;
-                    }
-
                     if (!string.IsNullOrWhiteSpace(line) && line.StartsWith("DX de", StringComparison.OrdinalIgnoreCase))
                         await ProcessSpotLineAsync(line, spots, distributor, cty, bandMode, dupeDetector, spotOpts, ct);
                 }
@@ -137,6 +127,19 @@ public sealed class RbnClient : BackgroundService
 
             if (start < text.Length)
                 partial.Append(text[start..]);
+
+            // RBN's login prompt ("Please enter your call: ") has no trailing newline,
+            // so it never becomes a complete line above.  Detect it in the unterminated
+            // tail of the buffer and respond immediately.
+            if (!loginSent && partial.ToString().Contains("call", StringComparison.OrdinalIgnoreCase))
+            {
+                var callsign = _opts.Callsign.ToUpperInvariant();
+                var login = enc.GetBytes(callsign + "\r\n");
+                await stream.WriteAsync(login, ct);
+                loginSent = true;
+                partial.Clear();
+                _log.LogInformation("RBN client logged in as {Callsign}", callsign);
+            }
         }
     }
 
