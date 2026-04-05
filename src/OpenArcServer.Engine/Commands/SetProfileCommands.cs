@@ -229,16 +229,39 @@ public sealed class ShowStationCommand : IArcCommand
 }
 
 // ---------------------------------------------------------------------------
-// SET/SKIMMER  — enable receiving skimmer/RBN spots (default)
+// SET/SKIMMER  — enable receiving skimmer/RBN spots
 // ---------------------------------------------------------------------------
 public sealed class SetSkimmerCommand : IArcCommand
 {
+    private readonly IConnectionManager _connections;
+    private readonly IArxClientRegistry _arxClients;
+
+    public SetSkimmerCommand(IConnectionManager connections, IArxClientRegistry arxClients)
+    {
+        _connections = connections;
+        _arxClients  = arxClients;
+    }
+
     public Task ExecuteAsync(CommandContext context, CancellationToken ct = default)
     {
-        context.Session.ReceiveSkimmer = true;
+        ApplyToAllSessions(context.Session.Callsign, true, _connections, _arxClients);
         context.Response.Messages.Add("Skimmer/RBN spots enabled.");
         context.Response.DistroType = DistroType.ToRequester;
         return Task.CompletedTask;
+    }
+
+    internal static void ApplyToAllSessions(
+        string callsign, bool value,
+        IConnectionManager connections, IArxClientRegistry arxClients)
+    {
+        // Update every session for this callsign regardless of protocol
+        foreach (var s in connections.GetConnectedUsers()
+                     .Where(s => s.Callsign.Equals(callsign, StringComparison.OrdinalIgnoreCase)))
+            s.ReceiveSkimmer = value;
+
+        foreach (var s in arxClients.GetAll()
+                     .Where(s => s.Callsign.Equals(callsign, StringComparison.OrdinalIgnoreCase)))
+            s.ReceiveSkimmer = value;
     }
 }
 
@@ -247,9 +270,18 @@ public sealed class SetSkimmerCommand : IArcCommand
 // ---------------------------------------------------------------------------
 public sealed class SetNoSkimmerCommand : IArcCommand
 {
+    private readonly IConnectionManager _connections;
+    private readonly IArxClientRegistry _arxClients;
+
+    public SetNoSkimmerCommand(IConnectionManager connections, IArxClientRegistry arxClients)
+    {
+        _connections = connections;
+        _arxClients  = arxClients;
+    }
+
     public Task ExecuteAsync(CommandContext context, CancellationToken ct = default)
     {
-        context.Session.ReceiveSkimmer = false;
+        SetSkimmerCommand.ApplyToAllSessions(context.Session.Callsign, false, _connections, _arxClients);
         context.Response.Messages.Add("Skimmer/RBN spots disabled. Use SET/SKIMMER to re-enable.");
         context.Response.DistroType = DistroType.ToRequester;
         return Task.CompletedTask;

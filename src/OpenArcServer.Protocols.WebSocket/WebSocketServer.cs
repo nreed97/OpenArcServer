@@ -187,26 +187,37 @@ public sealed class WebSocketServer : BackgroundService
     {
         _log.LogInformation("WebSocket connection from {Endpoint}", endpoint);
 
-        // Wait for auth message (30 s timeout)
+        // Wait for auth message (30 s timeout).
+        // Accepts two forms:
+        //   {"type":"auth","callsign":"W1AW"}   — operator, gets filtered spots
+        //   {"type":"monitor"}                  — read-only dashboard, gets all spots
         string? callsign = null;
+        bool    isMonitor = false;
         try
         {
             using var authCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             using var linked  = CancellationTokenSource.CreateLinkedTokenSource(ct, authCts.Token);
             var msg = await ReceiveJsonAsync(ws, linked.Token);
-            if (msg?.TryGetProperty("type", out var typeEl) == true &&
-                typeEl.GetString() == "auth" &&
-                msg.Value.TryGetProperty("callsign", out var callEl))
+            if (msg?.TryGetProperty("type", out var typeEl) == true)
             {
-                var c = callEl.GetString()?.Trim().ToUpperInvariant();
-                if (IsValidCallsign(c)) callsign = c;
+                var msgType = typeEl.GetString();
+                if (msgType == "auth" && msg.Value.TryGetProperty("callsign", out var callEl))
+                {
+                    var c = callEl.GetString()?.Trim().ToUpperInvariant();
+                    if (!string.IsNullOrWhiteSpace(c)) callsign = c;
+                }
+                else if (msgType == "monitor")
+                {
+                    callsign  = "MONITOR";
+                    isMonitor = true;
+                }
             }
         }
         catch { }
 
         if (callsign is null)
         {
-            await SendJsonAsync(ws, new { type = "error", message = "Authentication required. Send {\"type\":\"auth\",\"callsign\":\"W1AW\"}" }, ct);
+            await SendJsonAsync(ws, new { type = "error", message = "Send {\"type\":\"auth\",\"callsign\":\"W1AW\"} or {\"type\":\"monitor\"}" }, ct);
             try { await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Auth required", ct); } catch { }
             return;
         }
@@ -217,6 +228,8 @@ public sealed class WebSocketServer : BackgroundService
             RemoteEndpoint  = endpoint,
             ConnectType     = ConnectStateType.WebSocketUser,
             ConnectionState = ConnectionState.Connected,
+            // Monitor sessions receive everything; operator sessions start with skimmer off
+            ReceiveSkimmer  = isMonitor,
         };
 
         session.SendAsync = async (text, token) =>
@@ -317,10 +330,9 @@ public sealed class WebSocketServer : BackgroundService
         await ws.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
     }
 
-    private static bool IsValidCallsign(string? cs)
+    private static bool IsValidIdentifier(string? cs)
     {
-        if (string.IsNullOrWhiteSpace(cs) || cs.Length < 3 || cs.Length > 12) return false;
-        return System.Text.RegularExpressions.Regex.IsMatch(cs,
-            @"^[A-Z0-9]{1,3}[0-9][A-Z0-9]{0,3}[A-Z](-[0-9]{1,2})?$");
+        if (string.IsNullOrWhiteSpace(cs) || cs.Length < 2 || cs.Length > 20) return false;
+        return System.Text.RegularExpressions.Regex.IsMatch(cs, @"^[A-Z0-9/_\-]+$");
     }
 }

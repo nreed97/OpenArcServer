@@ -1,3 +1,8 @@
+using System.ComponentModel;
+using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace OpenArcServer.Core.Configuration;
 
 public sealed class ServerOptions
@@ -55,12 +60,62 @@ public sealed class SpotProcessingOptions
     public int DuplicateWindowMinutes { get; set; } = 20;
 }
 
+/// <summary>
+/// Represents a PCxx peer node.  In appsettings.json you can use either
+/// an object <c>{"Host":"n1ta.ddns.net","Port":23}</c> or a plain string
+/// <c>"n1ta.ddns.net:23"</c> — both forms are accepted.
+/// </summary>
+[JsonConverter(typeof(PcxxPeerConverter))]
+[TypeConverter(typeof(PcxxPeerTypeConverter))]
 public sealed class PcxxPeer
 {
-    public string Host { get; set; } = string.Empty;
-    public int Port { get; set; } = 7300;
+    public string Host  { get; set; } = string.Empty;
+    public int    Port  { get; set; } = 7300;
     /// <summary>Optional display label — used in logs before the handshake reveals the node callsign.</summary>
     public string Label { get; set; } = string.Empty;
+
+    /// <summary>Parse a "host:port" string, falling back to port 7300 if absent.</summary>
+    public static PcxxPeer Parse(string value)
+    {
+        value = value.Trim();
+        var colon = value.LastIndexOf(':');
+        if (colon > 0 && int.TryParse(value[(colon + 1)..], out var p))
+            return new PcxxPeer { Host = value[..colon].Trim(), Port = p };
+        return new PcxxPeer { Host = value, Port = 7300 };
+    }
+}
+
+/// <summary>
+/// Allows <see cref="PcxxPeer"/> to be deserialized from either a JSON string
+/// <c>"host:port"</c> or a JSON object <c>{"Host":"...","Port":...}</c>.
+/// </summary>
+internal sealed class PcxxPeerConverter : JsonConverter<PcxxPeer>
+{
+    public override PcxxPeer Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String)
+            return PcxxPeer.Parse(reader.GetString()!);
+
+        // Object form — deserialize normally using a temp options without this converter
+        var inner = new JsonSerializerOptions(options);
+        inner.Converters.Remove(inner.Converters.OfType<PcxxPeerConverter>().FirstOrDefault()!);
+        using var doc = JsonDocument.ParseValue(ref reader);
+        return new PcxxPeer
+        {
+            Host  = doc.RootElement.TryGetProperty("Host",  out var h) ? h.GetString() ?? "" : "",
+            Port  = doc.RootElement.TryGetProperty("Port",  out var p) ? p.GetInt32()       : 7300,
+            Label = doc.RootElement.TryGetProperty("Label", out var l) ? l.GetString() ?? "" : "",
+        };
+    }
+
+    public override void Write(Utf8JsonWriter writer, PcxxPeer value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("Host",  value.Host);
+        writer.WriteNumber("Port",  value.Port);
+        writer.WriteString("Label", value.Label);
+        writer.WriteEndObject();
+    }
 }
 
 public sealed class PcxxOptions
@@ -119,4 +174,18 @@ public sealed class ApiOptions
     /// Set via environment variable OPENARCSERVER_ADMIN_KEY for production use.
     /// </summary>
     public string AdminKey { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Allows <see cref="PcxxPeer"/> to be bound from a plain "host:port" string
+/// in appsettings.json via Microsoft.Extensions.Configuration's TypeConverter
+/// support.
+/// </summary>
+internal sealed class PcxxPeerTypeConverter : TypeConverter
+{
+    public override bool CanConvertFrom(ITypeDescriptorContext? ctx, Type sourceType)
+        => sourceType == typeof(string) || base.CanConvertFrom(ctx, sourceType);
+
+    public override object? ConvertFrom(ITypeDescriptorContext? ctx, CultureInfo? culture, object value)
+        => value is string s ? PcxxPeer.Parse(s) : base.ConvertFrom(ctx, culture, value);
 }
