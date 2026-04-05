@@ -59,7 +59,7 @@ public sealed class PcxxOutboundConnector : BackgroundService
             _log.LogInformation("PCxx outbound: connecting to {Peer}", label);
             try
             {
-                using var client = new TcpClient();
+                using var client = new TcpClient(System.Net.Sockets.AddressFamily.InterNetwork);
                 await client.ConnectAsync(peer.Host, peer.Port, ct);
                 _log.LogInformation("PCxx outbound: connected to {Peer}", label);
                 delay = TimeSpan.FromSeconds(5); // reset backoff on successful connect

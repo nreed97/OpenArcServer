@@ -82,7 +82,7 @@ public sealed class RbnClient : BackgroundService
 
     private async Task ConnectAndReadAsync(CancellationToken ct)
     {
-        using var client = new TcpClient();
+        using var client = new TcpClient(System.Net.Sockets.AddressFamily.InterNetwork);
         await client.ConnectAsync(_opts.Host, _opts.Port, ct);
         _log.LogInformation("RBN client connected to {Host}:{Port}", _opts.Host, _opts.Port);
 
