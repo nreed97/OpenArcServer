@@ -86,20 +86,20 @@ public sealed class PcxxClientConnection
 
         try
         {
-            if (_isOutbound)
+            // Both inbound and outbound send PC18 to introduce ourselves.
+            //
+            // Inbound  (we accepted the connection): we send PC18, peer responds PC38.
+            // Outbound (we dialled the peer):        we also send PC18 first.
+            //   - DX Spider expects the connecting node to send PC18 to initiate.
+            //   - AR-Cluster peers also send PC18 from their side; we handle that in
+            //     HandlePc18Async and skip re-registration if the session is already live.
             {
-                // Outbound: wait for peer to send PC18 first, then we respond PC38
-                session.ConnectionState = ConnectionState.CallsignRequest;
-            }
-            else
-            {
-                // Inbound: we initiate handshake with PC18
                 var pc18 = PcxxMessage.Pc18(_serverOpts.NodeCallsign);
                 await session.SendAsync(pc18, cts.Token);
                 session.ConnectionState = ConnectionState.CallsignRequest;
 
-                if (_opts.LogOutboundNodeUser)
-                    _log.LogInformation("PCxx TX → {Endpoint}: {Msg}", endpoint, pc18.TrimEnd());
+                if (_opts.LogOutboundNodeUser || _isOutbound)
+                    _log.LogInformation("PCxx TX PC18 → {Endpoint}", endpoint);
             }
 
             await ReadLoopAsync(stream, session, cts.Token);
@@ -196,21 +196,30 @@ public sealed class PcxxClientConnection
         }
     }
 
-    // ── PC18 — Init Request (outbound: peer sends this to us after we connect) ─
+    // ── PC18 — Peer introduces itself ─────────────────────────────────────────
+    // Received by both inbound AND outbound connections:
+    //   Inbound:  peer (connecting side) sends PC18 to us
+    //   Outbound: the AR-Cluster accepting side sends back its own PC18 after
+    //             receiving ours.  DX Spider does not send PC18 back to us.
     private async Task HandlePc18Async(UserSession session, string[] fields, CancellationToken ct)
     {
-        if (!_isOutbound) return; // inbound connections don't receive PC18
-
         // PC18^node_call^  — peer is telling us their callsign
         var nodeCall = (fields.ElementAtOrDefault(1) ?? string.Empty).ToUpperInvariant().Trim();
         if (string.IsNullOrEmpty(nodeCall))
             nodeCall = session.RemoteEndpoint;
 
+        // If this session is already registered (we completed handshake via PC38),
+        // the peer is an AR-Cluster node that also sent PC18 — just update the record.
+        if (!string.IsNullOrEmpty(session.Callsign))
+        {
+            _log.LogDebug("PCxx PC18 from already-registered node {Callsign} — ignoring", session.Callsign);
+            return;
+        }
+
         // Respond with PC38 (our software name, our callsign, our version)
         var pc38 = PcxxMessage.Pc38("OpenArcServer", _serverOpts.NodeCallsign, _serverOpts.Version);
         await session.SendAsync(pc38, ct);
 
-        // Register the node now (handshake finishes when we receive PC22 from them)
         session.Callsign = nodeCall;
         session.ConnectionState = ConnectionState.Connected;
 
@@ -225,10 +234,11 @@ public sealed class PcxxClientConnection
 
         _nodes.AddNode(node, session);
         _connections.AddSession(session);
-        _log.LogInformation("PCxx outbound: received PC18 from {Callsign}, sent PC38", nodeCall);
+        _log.LogInformation("PCxx received PC18 from {Callsign} ({Direction}), sent PC38",
+            nodeCall, _isOutbound ? "outbound peer" : "inbound peer");
     }
 
-    // ── PC38 — Init Start (inbound: response to our PC18) ─────────────────
+    // ── PC38 — Peer responds to our PC18 ──────────────────────────────────────
     private async Task HandlePc38Async(UserSession session, string[] fields, CancellationToken ct)
     {
         // PC38^software^node_call^version^
@@ -239,6 +249,15 @@ public sealed class PcxxClientConnection
         if (string.IsNullOrEmpty(nodeCall))
         {
             _log.LogWarning("PCxx PC38 missing node callsign from {Endpoint}", session.RemoteEndpoint);
+            return;
+        }
+
+        // Already registered via a simultaneous PC18 exchange — just update software info
+        if (!string.IsNullOrEmpty(session.Callsign))
+        {
+            var existing = _nodes.FindNode(session.Callsign);
+            if (existing is not null) { existing.Software = software; existing.Version = version; }
+            _log.LogDebug("PCxx PC38 from already-registered {Callsign} — updated software info", session.Callsign);
             return;
         }
 
