@@ -28,7 +28,14 @@
     }
     header h1 { font-size: 18px; font-weight: 600; color: var(--accent); }
     header .tag { font-size: 12px; color: var(--muted); }
-    #status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--red); margin-left: auto; }
+    #header-key-wrap { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    #header-key-wrap label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    #header-admin-key {
+      background: #010409; border: 1px solid var(--border); border-radius: 4px;
+      color: var(--text); padding: 4px 8px; font-size: 12px; width: 160px;
+    }
+    #header-admin-key:focus { outline: none; border-color: var(--accent); }
+    #status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--red); }
     #status-dot.live { background: var(--green); }
     #status-label { font-size: 12px; color: var(--muted); }
 
@@ -139,6 +146,12 @@
 <header>
   <h1>OpenArcServer</h1>
   <span class="tag">Admin Dashboard</span>
+  <div id="header-key-wrap">
+    <label for="header-admin-key">Admin Key</label>
+    <input type="password" id="header-admin-key" class="admin-key-input"
+           placeholder="Enter admin key…"
+           oninput="setAdminKey(this.value)" />
+  </div>
   <div id="status-dot"></div>
   <span id="status-label">Disconnected</span>
 </header>
@@ -216,16 +229,6 @@
   <!-- Admin -->
   <div id="tab-admin" class="tab">
     <div class="admin-form">
-      <h3>Authentication</h3>
-      <div class="form-row">
-        <label>Admin Key</label>
-        <input type="password" id="admin-key" class="admin-key-input"
-               placeholder="Set AdminKey in appsettings.json"
-               oninput="setAdminKey(this.value)" />
-      </div>
-    </div>
-
-    <div class="admin-form">
       <h3>Broadcast Announcement</h3>
       <div class="form-row">
         <label>Message</label>
@@ -254,18 +257,10 @@
         <button class="refresh-btn" onclick="loadSettings()">Reload</button>
       </div>
     </div>
-    <div class="admin-form" style="margin-bottom:16px">
-      <div class="form-row">
-        <label>Admin Key</label>
-        <input type="password" id="settings-admin-key" class="admin-key-input"
-               placeholder="Required to load or save settings"
-               oninput="setAdminKey(this.value)" />
-        <button class="btn" onclick="loadSettings()" style="white-space:nowrap">Load Settings</button>
-      </div>
-    </div>
     <p style="font-size:12px;color:var(--muted);margin-bottom:16px">
       Changes are written to <code>appsettings.json</code>.
-      Most settings require a server restart to take effect.
+      Use <strong>Save &amp; Restart</strong> to apply changes immediately,
+      or <strong>Save Settings</strong> to write without restarting.
     </p>
 
     <div class="settings-grid">
@@ -432,10 +427,11 @@
     </div><!-- .settings-grid -->
 
     <div class="settings-actions">
-      <button class="btn" onclick="saveSettings()">Save Settings</button>
+      <button class="btn" onclick="saveSettings(false)">Save Settings</button>
+      <button class="btn" style="background:var(--orange);color:#000" onclick="saveSettings(true)">Save &amp; Restart</button>
       <span id="settings-result"></span>
     </div>
-    <p class="restart-note" style="margin-top:8px">⚠ Most changes require a server restart to take effect.</p>
+    <p class="restart-note" style="margin-top:8px">⚠ Restart required for most changes. Server auto-restarts if running under systemd or Windows Service.</p>
   </div>
 
 </main>
@@ -467,7 +463,7 @@ function showTab(name) {
   if (name === 'users')     loadUsers();
   if (name === 'nodes')     loadNodes();
   if (name === 'propagation') loadProp();
-  if (name === 'settings' && getAdminKey()) loadSettings();
+  if (name === 'settings') loadSettings();
 }
 
 // ── API helpers ───────────────────────────────────────────────────────────
@@ -692,13 +688,20 @@ async function kickUser() {
 
 // ── Settings ──────────────────────────────────────────────────────────────
 async function loadSettings() {
-  const d = await apiAdmin('GET', '/api/admin/settings');
-  if (!d || d.error || d.title) {
-    document.getElementById('settings-result').style.color = 'var(--red)';
-    document.getElementById('settings-result').textContent =
-      'Could not load settings — check Admin Key.';
+  const resEl = document.getElementById('settings-result');
+  if (!getAdminKey()) {
+    resEl.style.color = 'var(--muted)';
+    resEl.textContent = 'Enter admin key in the header to load settings';
     return;
   }
+  resEl.textContent = 'Loading…'; resEl.style.color = 'var(--muted)';
+  const d = await apiAdmin('GET', '/api/admin/settings');
+  if (!d || d.error || d.title) {
+    resEl.style.color = 'var(--red)';
+    resEl.textContent = 'Could not load settings — check Admin Key';
+    return;
+  }
+  resEl.textContent = '';
 
   // Server
   setField('cfg-NodeCallsign',   d.Server?.NodeCallsign);
@@ -844,9 +847,9 @@ function setCheck(id, val) {
   if (el && val !== undefined && val !== null) el.checked = !!val;
 }
 
-async function saveSettings() {
+async function saveSettings(andRestart = false) {
   const resEl = document.getElementById('settings-result');
-  resEl.textContent = 'Saving…';
+  resEl.textContent = andRestart ? 'Saving…' : 'Saving…';
   resEl.style.color = 'var(--muted)';
 
   const body = {
@@ -889,13 +892,45 @@ async function saveSettings() {
 
   const r = await apiAdmin('PUT', '/api/admin/settings', body);
   if (r && r.saved) {
-    resEl.style.color = 'var(--green)';
-    resEl.textContent = '✓ Saved — restart server to apply changes';
+    if (andRestart) {
+      resEl.style.color = 'var(--yellow)';
+      resEl.textContent = '✓ Saved — restarting server…';
+      await apiAdmin('POST', '/api/admin/restart');
+      // Poll until server comes back
+      setTimeout(pollUntilBack, 2000);
+    } else {
+      resEl.style.color = 'var(--green)';
+      resEl.textContent = '✓ Saved — restart server to apply changes';
+      setTimeout(() => resEl.textContent = '', 8000);
+    }
   } else {
     resEl.style.color = 'var(--red)';
     resEl.textContent = 'Error: ' + (r?.error || r?.title || JSON.stringify(r));
+    setTimeout(() => resEl.textContent = '', 8000);
   }
-  setTimeout(() => resEl.textContent = '', 8000);
+}
+
+async function pollUntilBack() {
+  const resEl = document.getElementById('settings-result');
+  let attempts = 0;
+  const interval = setInterval(async () => {
+    attempts++;
+    try {
+      const r = await fetch(API_BASE + '/api/stats');
+      if (r.ok) {
+        clearInterval(interval);
+        resEl.style.color = 'var(--green)';
+        resEl.textContent = '✓ Server restarted successfully';
+        loadStats();
+        setTimeout(() => resEl.textContent = '', 5000);
+      }
+    } catch { /* still down */ }
+    if (attempts > 30) {
+      clearInterval(interval);
+      resEl.style.color = 'var(--red)';
+      resEl.textContent = 'Server did not come back — check process manager';
+    }
+  }, 2000);
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────

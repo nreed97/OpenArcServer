@@ -377,6 +377,22 @@ try
         return Results.Ok(new { disconnected = callsign.ToUpperInvariant() });
     });
 
+    // POST /api/admin/restart  — gracefully stop the process (systemd/Windows Service restarts it)
+    admin.MapPost("/restart", (
+        HttpContext http,
+        IOptions<ApiOptions> apiOpts,
+        IHostApplicationLifetime lifetime) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+        // Schedule stop slightly after response is sent
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(500);
+            lifetime.StopApplication();
+        });
+        return Results.Ok(new { restarting = true, note = "Server is stopping. It will restart automatically if running under systemd or Windows Service." });
+    });
+
     // GET /api/admin/settings  — return current effective configuration
     var settingsPath = Path.Combine(app.Environment.ContentRootPath, "appsettings.json");
 
