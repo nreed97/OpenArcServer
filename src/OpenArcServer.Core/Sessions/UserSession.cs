@@ -21,8 +21,11 @@ public sealed class UserSession
     // User preferences
     public int DxCount { get; set; } = 10;
 
-    /// <summary>When false the user suppresses all skimmer/RBN spots.</summary>
-    public bool ReceiveSkimmer { get; set; } = false;
+    /// <summary>When false the user suppresses CW skimmer spots from peer nodes.</summary>
+    public bool ReceiveSkimmer { get; set; } = true;
+
+    /// <summary>When false the user suppresses Reverse Beacon Network (RBN) spots.</summary>
+    public bool ReceiveRbn { get; set; } = true;
 
     // Real-time spot filter (configured via SET/DX/BAND, MODE, CONT, CQ)
     public SpotFilter SpotFilter { get; } = new();

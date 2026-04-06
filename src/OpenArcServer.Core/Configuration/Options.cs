@@ -69,10 +69,12 @@ public sealed class SpotProcessingOptions
 [TypeConverter(typeof(PcxxPeerTypeConverter))]
 public sealed class PcxxPeer
 {
-    public string Host  { get; set; } = string.Empty;
-    public int    Port  { get; set; } = 7300;
+    public string Host    { get; set; } = string.Empty;
+    public int    Port    { get; set; } = 7300;
     /// <summary>Optional display label — used in logs before the handshake reveals the node callsign.</summary>
-    public string Label { get; set; } = string.Empty;
+    public string Label   { get; set; } = string.Empty;
+    /// <summary>When false the connector skips this peer without removing it from the list.</summary>
+    public bool   Enabled { get; set; } = true;
 
     /// <summary>Parse a "host:port" string, falling back to port 7300 if absent.</summary>
     public static PcxxPeer Parse(string value)
@@ -102,18 +104,20 @@ internal sealed class PcxxPeerConverter : JsonConverter<PcxxPeer>
         using var doc = JsonDocument.ParseValue(ref reader);
         return new PcxxPeer
         {
-            Host  = doc.RootElement.TryGetProperty("Host",  out var h) ? h.GetString() ?? "" : "",
-            Port  = doc.RootElement.TryGetProperty("Port",  out var p) ? p.GetInt32()       : 7300,
-            Label = doc.RootElement.TryGetProperty("Label", out var l) ? l.GetString() ?? "" : "",
+            Host    = doc.RootElement.TryGetProperty("Host",    out var h) ? h.GetString() ?? "" : "",
+            Port    = doc.RootElement.TryGetProperty("Port",    out var p) ? p.GetInt32()        : 7300,
+            Label   = doc.RootElement.TryGetProperty("Label",   out var l) ? l.GetString() ?? "" : "",
+            Enabled = doc.RootElement.TryGetProperty("Enabled", out var e) ? e.GetBoolean()      : true,
         };
     }
 
     public override void Write(Utf8JsonWriter writer, PcxxPeer value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();
-        writer.WriteString("Host",  value.Host);
-        writer.WriteNumber("Port",  value.Port);
-        writer.WriteString("Label", value.Label);
+        writer.WriteString("Host",    value.Host);
+        writer.WriteNumber("Port",    value.Port);
+        writer.WriteString("Label",   value.Label);
+        writer.WriteBoolean("Enabled", value.Enabled);
         writer.WriteEndObject();
     }
 }
@@ -161,6 +165,74 @@ public sealed class ArxServerOptions
     public bool Enabled { get; set; } = false;
     public int Port { get; set; } = 3608;
     public string BindAddress { get; set; } = "0.0.0.0";
+
+    /// <summary>
+    /// Outbound ARx2 peer nodes to connect to.
+    /// Format: "hostname:port"  (e.g. "n1ta.ddns.net:3608")
+    /// </summary>
+    public List<ArxPeer> Peers { get; set; } = new();
+
+    /// <summary>Seconds to wait before reconnecting after a disconnect (max doubles to 300 s).</summary>
+    public int ReconnectDelaySeconds { get; set; } = 30;
+}
+
+/// <summary>An outbound ARx2 peer node to maintain a connection to.</summary>
+[JsonConverter(typeof(ArxPeerConverter))]
+[TypeConverter(typeof(ArxPeerTypeConverter))]
+public sealed class ArxPeer
+{
+    public string Host    { get; set; } = string.Empty;
+    public int    Port    { get; set; } = 3608;
+    /// <summary>Optional human-readable label shown in log messages.</summary>
+    public string Label   { get; set; } = string.Empty;
+    /// <summary>When false the connector skips this peer without removing it from the list.</summary>
+    public bool   Enabled { get; set; } = true;
+
+    public static ArxPeer Parse(string value)
+    {
+        value = value.Trim();
+        var colon = value.LastIndexOf(':');
+        if (colon > 0 && int.TryParse(value[(colon + 1)..], out var p))
+            return new ArxPeer { Host = value[..colon].Trim(), Port = p };
+        return new ArxPeer { Host = value, Port = 3608 };
+    }
+}
+
+internal sealed class ArxPeerConverter : JsonConverter<ArxPeer>
+{
+    public override ArxPeer Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String)
+            return ArxPeer.Parse(reader.GetString()!);
+
+        using var doc = JsonDocument.ParseValue(ref reader);
+        return new ArxPeer
+        {
+            Host    = doc.RootElement.TryGetProperty("Host",    out var h) ? h.GetString() ?? "" : "",
+            Port    = doc.RootElement.TryGetProperty("Port",    out var p) ? p.GetInt32()        : 3608,
+            Label   = doc.RootElement.TryGetProperty("Label",   out var l) ? l.GetString() ?? "" : "",
+            Enabled = doc.RootElement.TryGetProperty("Enabled", out var e) ? e.GetBoolean()      : true,
+        };
+    }
+
+    public override void Write(Utf8JsonWriter writer, ArxPeer value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("Host",     value.Host);
+        writer.WriteNumber("Port",     value.Port);
+        writer.WriteString("Label",    value.Label);
+        writer.WriteBoolean("Enabled", value.Enabled);
+        writer.WriteEndObject();
+    }
+}
+
+internal sealed class ArxPeerTypeConverter : TypeConverter
+{
+    public override bool CanConvertFrom(ITypeDescriptorContext? ctx, Type sourceType)
+        => sourceType == typeof(string) || base.CanConvertFrom(ctx, sourceType);
+
+    public override object? ConvertFrom(ITypeDescriptorContext? ctx, CultureInfo? culture, object value)
+        => value is string s ? ArxPeer.Parse(s) : base.ConvertFrom(ctx, culture, value);
 }
 
 /// <summary>Options for the REST API / admin dashboard.</summary>

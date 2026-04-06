@@ -56,7 +56,7 @@ public sealed class MessageDistributor : IMessageDistributor
                     await SendToAllUsersAsync(text, response.SpotData, ct);
                 }
                 if (!string.IsNullOrEmpty(response.ArxMessage))
-                    await SendToAllArxClientsAsync(response.ArxMessage, response.SpotData, ct);
+                    await SendToAllArxClientsAsync(response.ArxMessage, response.SpotData, sender, ct);
                 if (!string.IsNullOrEmpty(response.PcxxMessage))
                     await SendToAllNodesAsync(response.PcxxMessage, ct);
                 // WebSocket: send structured JSON if this is a DX spot, otherwise text
@@ -70,7 +70,7 @@ public sealed class MessageDistributor : IMessageDistributor
                 if (!string.IsNullOrEmpty(text))
                     await SendToAllUsersAsync(text, response.SpotData, ct);
                 if (!string.IsNullOrEmpty(response.ArxMessage))
-                    await SendToAllArxClientsAsync(response.ArxMessage, response.SpotData, ct);
+                    await SendToAllArxClientsAsync(response.ArxMessage, response.SpotData, sender, ct);
                 // WebSocket clients also receive user-facing spots
                 if (!string.IsNullOrEmpty(text) && response.SpotData is { } usersSpot)
                     await SendToAllWebSocketClientsJsonAsync(usersSpot, ct);
@@ -105,23 +105,25 @@ public sealed class MessageDistributor : IMessageDistributor
     private async Task SendToAllUsersAsync(string text, DxSpot? spotData, CancellationToken ct)
     {
         var sessions = _connections.GetConnectedUsers();
-        // If this is a DX spot, apply each user's real-time filter and skimmer preference.
         IEnumerable<UserSession> targets = spotData is null
             ? sessions
-            : sessions.Where(s =>
-                s.SpotFilter.Matches(spotData) &&
-                (s.ReceiveSkimmer || !spotData.Skimmer));
+            : sessions.Where(s => s.SpotFilter.Matches(spotData) && AllowsSpot(s, spotData));
         await Task.WhenAll(targets.Select(s => SendToSessionAsync(s, text, ct)));
     }
 
-    private async Task SendToAllArxClientsAsync(string arxXml, DxSpot? spotData, CancellationToken ct)
+    private async Task SendToAllArxClientsAsync(
+        string arxXml, DxSpot? spotData, UserSession sender, CancellationToken ct)
     {
         var clients = _arxClients.GetAll();
         IEnumerable<UserSession> targets = spotData is null
             ? clients
-            : clients.Where(s =>
-                s.SpotFilter.Matches(spotData) &&
-                (s.ReceiveSkimmer || !spotData.Skimmer));
+            : clients.Where(s => s.SpotFilter.Matches(spotData) && AllowsSpot(s, spotData));
+
+        // ARx peer node sessions: never reflect a spot back to the node it arrived from.
+        targets = targets.Where(s =>
+            s.ConnectType != Core.ConnectStateType.ArxNode ||
+            s.SessionId   != sender.SessionId);
+
         await Task.WhenAll(targets
             .Where(s => s.SendAsync is not null)
             .Select(s => SendToSessionAsync(s, arxXml, ct)));
@@ -151,11 +153,25 @@ public sealed class MessageDistributor : IMessageDistributor
             cont      = spot.Cont,
             cqZone    = spot.CqZone,
             skimmer   = spot.Skimmer,
+            rbn       = spot.SpotterNode == "RBN",
             timestamp = spot.Timestamp.ToString("O"),
         });
         var clients = _wsClients.GetAll();
-        var targets = clients.Where(s => s.SpotFilter.Matches(spot) && (s.ReceiveSkimmer || !spot.Skimmer));
+        var targets = clients.Where(s => s.SpotFilter.Matches(spot) && AllowsSpot(s, spot));
         await Task.WhenAll(targets.Where(s => s.SendAsync is not null).Select(s => SendToSessionAsync(s, json, ct)));
+    }
+
+    /// <summary>
+    /// Returns true if the session's filter settings permit this spot.
+    /// RBN spots (SpotterNode=="RBN") are gated by ReceiveRbn.
+    /// Non-RBN skimmer spots are gated by ReceiveSkimmer.
+    /// Human/non-skimmer spots always pass.
+    /// </summary>
+    private static bool AllowsSpot(UserSession s, DxSpot spot)
+    {
+        if (spot.SpotterNode == "RBN") return s.ReceiveRbn;
+        if (spot.Skimmer)              return s.ReceiveSkimmer;
+        return true;
     }
 
     private async Task SendToAllWebSocketClientsTextAsync(string text, CancellationToken ct)

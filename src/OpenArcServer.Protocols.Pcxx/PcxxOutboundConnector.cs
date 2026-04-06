@@ -20,42 +20,60 @@ namespace OpenArcServer.Protocols.Pcxx;
 /// </summary>
 public sealed class PcxxOutboundConnector : BackgroundService
 {
-    private readonly PcxxOptions _opts;
+    private readonly IOptionsMonitor<PcxxOptions> _optsMon;
     private readonly IServiceProvider _services;
     private readonly ILogger<PcxxOutboundConnector> _log;
 
     public PcxxOutboundConnector(
-        IOptions<PcxxOptions> opts,
+        IOptionsMonitor<PcxxOptions> optsMon,
         IServiceProvider services,
         ILogger<PcxxOutboundConnector> log)
     {
-        _opts = opts.Value;
+        _optsMon  = optsMon;
         _services = services;
-        _log = log;
+        _log      = log;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_opts.Enabled || _opts.Peers.Count == 0)
+        var initial = _optsMon.CurrentValue;
+        if (!initial.Enabled || initial.Peers.Count == 0)
         {
             _log.LogInformation("PCxx outbound connector: no peers configured");
             return;
         }
 
-        _log.LogInformation("PCxx outbound connector starting for {Count} peer(s)", _opts.Peers.Count);
+        _log.LogInformation("PCxx outbound connector starting for {Count} peer(s)", initial.Peers.Count);
 
-        var tasks = _opts.Peers.Select(peer => MaintainPeerAsync(peer, stoppingToken));
+        var tasks = initial.Peers.Select(peer => MaintainPeerAsync($"{peer.Host}:{peer.Port}", stoppingToken));
         await Task.WhenAll(tasks);
     }
 
-    private async Task MaintainPeerAsync(PcxxPeer peer, CancellationToken ct)
+    private async Task MaintainPeerAsync(string peerKey, CancellationToken ct)
     {
-        var label = string.IsNullOrEmpty(peer.Label) ? $"{peer.Host}:{peer.Port}" : peer.Label;
-        var delay = TimeSpan.FromSeconds(5);
+        var delay    = TimeSpan.FromSeconds(5);
         var maxDelay = TimeSpan.FromSeconds(300);
 
         while (!ct.IsCancellationRequested)
         {
+            // Re-read live options each iteration so Enabled changes take effect immediately
+            var opts = _optsMon.CurrentValue;
+            var peer = opts.Peers.FirstOrDefault(p => $"{p.Host}:{p.Port}" == peerKey);
+
+            if (peer is null)
+            {
+                _log.LogInformation("PCxx outbound: peer {Key} no longer in config, stopping", peerKey);
+                return;
+            }
+
+            var label = string.IsNullOrEmpty(peer.Label) ? peerKey : peer.Label;
+
+            if (!peer.Enabled)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
+                continue;
+            }
+
             _log.LogInformation("PCxx outbound: connecting to {Peer}", label);
             try
             {

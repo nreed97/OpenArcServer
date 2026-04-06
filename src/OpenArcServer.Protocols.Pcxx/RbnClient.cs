@@ -220,9 +220,12 @@ public sealed class RbnClient : BackgroundService
             var formatted = DxSpotFormatter.Format(spot);
             var response = new CommandResponse
             {
-                DistroType = DistroType.ToUsers,
-                MsgType    = MsgType.Dx,
-                SpotData   = spot,
+                DistroType  = DistroType.ToAll,
+                MsgType     = MsgType.Dx,
+                SpotData    = spot,
+                // Forward to ARx peer nodes and PCxx nodes so they receive RBN spots too
+                ArxMessage  = DxSpotFormatter.FormatArxClientDx(spot, spot.SpotterNode),
+                PcxxMessage = DxSpotFormatter.FormatPc11(spot, spot.SpotterNode),
             };
             response.Messages.Add(formatted);
 

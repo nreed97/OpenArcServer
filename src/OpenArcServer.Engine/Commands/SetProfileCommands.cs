@@ -223,13 +223,35 @@ public sealed class ShowStationCommand : IArcCommand
         resp.Messages.Add($"Email    : {(string.IsNullOrEmpty(s.Email) ? "(not set)" : s.Email)}");
         resp.Messages.Add($"DX count : {s.DxCount}");
         resp.Messages.Add($"Skimmer  : {(s.ReceiveSkimmer ? "ON" : "OFF")}");
+        resp.Messages.Add($"RBN      : {(s.ReceiveRbn ? "ON" : "OFF")}");
         resp.Messages.Add($"Filter   : {s.SpotFilter.Describe()}");
         resp.Messages.Add($"Online   : {(DateTime.UtcNow - s.ConnectedAt).ToString(@"hh\:mm")} h");
     }
 }
 
 // ---------------------------------------------------------------------------
-// SET/SKIMMER  — enable receiving skimmer/RBN spots
+// Shared session-update helper
+// ---------------------------------------------------------------------------
+file static class SkimmerHelpers
+{
+    public static void ApplyToAllSessions(
+        string callsign,
+        IConnectionManager connections,
+        IArxClientRegistry arxClients,
+        Action<UserSession> apply)
+    {
+        foreach (var s in connections.GetConnectedUsers()
+                     .Where(s => s.Callsign.Equals(callsign, StringComparison.OrdinalIgnoreCase)))
+            apply(s);
+
+        foreach (var s in arxClients.GetAll()
+                     .Where(s => s.Callsign.Equals(callsign, StringComparison.OrdinalIgnoreCase)))
+            apply(s);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SET/SKIMMER  — enable CW skimmer spots from peer nodes
 // ---------------------------------------------------------------------------
 public sealed class SetSkimmerCommand : IArcCommand
 {
@@ -244,29 +266,17 @@ public sealed class SetSkimmerCommand : IArcCommand
 
     public Task ExecuteAsync(CommandContext context, CancellationToken ct = default)
     {
-        ApplyToAllSessions(context.Session.Callsign, true, _connections, _arxClients);
-        context.Response.Messages.Add("Skimmer/RBN spots enabled.");
+        SkimmerHelpers.ApplyToAllSessions(
+            context.Session.Callsign, _connections, _arxClients,
+            s => s.ReceiveSkimmer = true);
+        context.Response.Messages.Add("CW skimmer spots enabled.  Use SET/NOSKIMMER to disable.");
         context.Response.DistroType = DistroType.ToRequester;
         return Task.CompletedTask;
-    }
-
-    internal static void ApplyToAllSessions(
-        string callsign, bool value,
-        IConnectionManager connections, IArxClientRegistry arxClients)
-    {
-        // Update every session for this callsign regardless of protocol
-        foreach (var s in connections.GetConnectedUsers()
-                     .Where(s => s.Callsign.Equals(callsign, StringComparison.OrdinalIgnoreCase)))
-            s.ReceiveSkimmer = value;
-
-        foreach (var s in arxClients.GetAll()
-                     .Where(s => s.Callsign.Equals(callsign, StringComparison.OrdinalIgnoreCase)))
-            s.ReceiveSkimmer = value;
     }
 }
 
 // ---------------------------------------------------------------------------
-// SET/NOSKIMMER  — suppress skimmer/RBN spots
+// SET/NOSKIMMER  — suppress CW skimmer spots from peer nodes
 // ---------------------------------------------------------------------------
 public sealed class SetNoSkimmerCommand : IArcCommand
 {
@@ -281,8 +291,60 @@ public sealed class SetNoSkimmerCommand : IArcCommand
 
     public Task ExecuteAsync(CommandContext context, CancellationToken ct = default)
     {
-        SetSkimmerCommand.ApplyToAllSessions(context.Session.Callsign, false, _connections, _arxClients);
-        context.Response.Messages.Add("Skimmer/RBN spots disabled. Use SET/SKIMMER to re-enable.");
+        SkimmerHelpers.ApplyToAllSessions(
+            context.Session.Callsign, _connections, _arxClients,
+            s => s.ReceiveSkimmer = false);
+        context.Response.Messages.Add("CW skimmer spots disabled.  Use SET/SKIMMER to re-enable.");
+        context.Response.DistroType = DistroType.ToRequester;
+        return Task.CompletedTask;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SET/RBN  — enable Reverse Beacon Network spots
+// ---------------------------------------------------------------------------
+public sealed class SetRbnCommand : IArcCommand
+{
+    private readonly IConnectionManager _connections;
+    private readonly IArxClientRegistry _arxClients;
+
+    public SetRbnCommand(IConnectionManager connections, IArxClientRegistry arxClients)
+    {
+        _connections = connections;
+        _arxClients  = arxClients;
+    }
+
+    public Task ExecuteAsync(CommandContext context, CancellationToken ct = default)
+    {
+        SkimmerHelpers.ApplyToAllSessions(
+            context.Session.Callsign, _connections, _arxClients,
+            s => s.ReceiveRbn = true);
+        context.Response.Messages.Add("RBN spots enabled.  Use SET/NORBN to disable.");
+        context.Response.DistroType = DistroType.ToRequester;
+        return Task.CompletedTask;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SET/NORBN  — suppress Reverse Beacon Network spots
+// ---------------------------------------------------------------------------
+public sealed class SetNoRbnCommand : IArcCommand
+{
+    private readonly IConnectionManager _connections;
+    private readonly IArxClientRegistry _arxClients;
+
+    public SetNoRbnCommand(IConnectionManager connections, IArxClientRegistry arxClients)
+    {
+        _connections = connections;
+        _arxClients  = arxClients;
+    }
+
+    public Task ExecuteAsync(CommandContext context, CancellationToken ct = default)
+    {
+        SkimmerHelpers.ApplyToAllSessions(
+            context.Session.Callsign, _connections, _arxClients,
+            s => s.ReceiveRbn = false);
+        context.Response.Messages.Add("RBN spots disabled.  Use SET/RBN to re-enable.");
         context.Response.DistroType = DistroType.ToRequester;
         return Task.CompletedTask;
     }

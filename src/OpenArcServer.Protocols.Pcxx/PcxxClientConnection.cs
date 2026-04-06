@@ -388,12 +388,15 @@ public sealed class PcxxClientConnection
 
         if (!isDupe)
         {
-            // Distribute formatted spot to all connected telnet users
+            // Distribute to telnet users + ARx peer nodes
+            // (PCxx node flooding is handled separately via BroadcastToNodesAsync below)
             var formatted = DxSpotFormatter.Format(spot);
             var response = new Core.Commands.CommandResponse
             {
                 DistroType = DistroType.ToUsers,
-                MsgType = MsgType.Dx,
+                MsgType    = MsgType.Dx,
+                SpotData   = spot,
+                ArxMessage = DxSpotFormatter.FormatArxClientDx(spot, originNode),
             };
             response.Messages.Add(formatted);
             await _distributor.DistributeAsync(response, session, ct);

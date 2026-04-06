@@ -30,8 +30,11 @@ public sealed class HelpCommand : IArcCommand
         resp.Messages.Add("  SET/GRID <grid>                  - Set your Maidenhead grid (e.g. FN42)");
         resp.Messages.Add("  SET/EMAIL <address>              - Set your email address");
         resp.Messages.Add("  SET/DXCOUNT <n>                  - Set default SH/DX spot count (1-100)");
-        resp.Messages.Add("  SET/SKIMMER                      - Enable skimmer/RBN spots (default)");
-        resp.Messages.Add("  SET/NOSKIMMER                    - Suppress skimmer/RBN spots");
+        resp.Messages.Add("  SET/SKIMMER                      - Enable CW skimmer spots from peer nodes");
+        resp.Messages.Add("  SET/NOSKIMMER                    - Suppress CW skimmer spots");
+        resp.Messages.Add("  SET/RBN                          - Enable Reverse Beacon Network spots");
+        resp.Messages.Add("  SET/NORBN                        - Suppress RBN spots");
+        resp.Messages.Add("  TEST DX <freq> <call> [comment]  - Preview a spot locally (not propagated)");
         resp.Messages.Add("  SH/STA [callsign]                - Show station info");
         resp.Messages.Add("  T <callsign> <message>           - Send a private talk message");
         resp.Messages.Add("  ANN <message>                    - Announce to all connected users");

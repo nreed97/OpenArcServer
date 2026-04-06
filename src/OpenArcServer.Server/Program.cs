@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -156,13 +158,17 @@ try
     builder.Services.AddSingleton<SetEmailCommand>();
     builder.Services.AddSingleton<SetDxCountCommand>();
     builder.Services.AddSingleton<ShowStationCommand>();
-    // Skimmer toggle
+    // Skimmer / RBN toggles
     builder.Services.AddSingleton<SetSkimmerCommand>();
     builder.Services.AddSingleton<SetNoSkimmerCommand>();
+    builder.Services.AddSingleton<SetRbnCommand>();
+    builder.Services.AddSingleton<SetNoRbnCommand>();
     // Buddy list
     builder.Services.AddSingleton<AddBuddyCommand>();
     builder.Services.AddSingleton<DelBuddyCommand>();
     builder.Services.AddSingleton<ShowBuddyCommand>();
+    // Test spot (local only, not propagated)
+    builder.Services.AddSingleton<TestDxCommand>();
 
     builder.Services.AddSingleton<ICommandRouter>(sp =>
     {
@@ -200,21 +206,26 @@ try
         router.Register("SET EMAIL",      sp.GetRequiredService<SetEmailCommand>());
         router.Register("SET DXCOUNT",    sp.GetRequiredService<SetDxCountCommand>());
         router.Register("SH STA",         sp.GetRequiredService<ShowStationCommand>());
-        // Skimmer toggle
+        // Skimmer / RBN toggles
         router.Register("SET SKIMMER",    sp.GetRequiredService<SetSkimmerCommand>());
         router.Register("SET NOSKIMMER",  sp.GetRequiredService<SetNoSkimmerCommand>());
+        router.Register("SET RBN",        sp.GetRequiredService<SetRbnCommand>());
+        router.Register("SET NORBN",      sp.GetRequiredService<SetNoRbnCommand>());
         // Buddy list
         router.Register("ADD BUDDY",      sp.GetRequiredService<AddBuddyCommand>());
         router.Register("DEL BUDDY",      sp.GetRequiredService<DelBuddyCommand>());
         router.Register("SH BUDDY",       sp.GetRequiredService<ShowBuddyCommand>());
+        // Test spot
+        router.Register("TEST DX",        sp.GetRequiredService<TestDxCommand>());
         return router;
     });
 
     // Telnet server
     builder.Services.AddHostedService<TelnetServer>();
 
-    // ARx2 native client server (port 3608)
+    // ARx2 native client server (port 3608) + outbound peer connector
     builder.Services.AddHostedService<ArxServer>();
+    builder.Services.AddHostedService<ArxOutboundConnector>();
 
     // PCxx node server (inbound) + outbound connector + RBN
     builder.Services.AddHostedService<PcxxServer>();
@@ -240,10 +251,15 @@ try
         }
     });
 
+    builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
+        p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+
     var app = builder.Build();
 
     // Initialize database before starting
     app.Services.GetRequiredService<DatabaseInitializer>().Initialize();
+
+    app.UseCors();
 
     // ── Static files (admin dashboard from wwwroot/) ──────────────────────
     app.UseDefaultFiles();
@@ -359,6 +375,165 @@ try
         session.SendAsync?.Invoke("*** You have been disconnected by the sysop. ***\r\n", CancellationToken.None);
         connections.RemoveSession(session.SessionId);
         return Results.Ok(new { disconnected = callsign.ToUpperInvariant() });
+    });
+
+    // GET /api/admin/settings  — return current effective configuration
+    var settingsPath = Path.Combine(app.Environment.ContentRootPath, "appsettings.json");
+
+    admin.MapGet("/settings", (
+        HttpContext http,
+        IOptions<ApiOptions> apiOpts,
+        IOptions<ServerOptions> srvOpts,
+        IOptions<TelnetOptions> telOpts,
+        IOptions<RbnOptions> rbnOpts,
+        IOptions<SpotProcessingOptions> spotOpts,
+        IOptions<ArxServerOptions> arxOpts,
+        IOptions<PcxxOptions> pcxxOpts) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+        var s = srvOpts.Value; var t = telOpts.Value; var r = rbnOpts.Value;
+        var sp = spotOpts.Value; var a = arxOpts.Value; var pc = pcxxOpts.Value;
+        return Results.Ok(new
+        {
+            Server = new { s.NodeCallsign, s.SysopCallsign, s.ServerName, s.MotdFile },
+            Telnet = new { t.Port, t.MaxConnections, t.IdleTimeoutMinutes, t.IntroMessage, t.WelcomeMessage },
+            Rbn    = new { r.Enabled, r.Host, r.Port, r.Callsign, r.ReconnectDelaySeconds },
+            SpotProcessing = new
+            {
+                sp.MaxCommentLength, sp.MinFrequencyKhz, sp.MaxFrequencyKhz,
+                sp.EnableBadWordFilter, sp.EnableDuplicateDetection, sp.DuplicateWindowMinutes
+            },
+            Arx  = new { a.Enabled, a.Port, a.ReconnectDelaySeconds },
+            Pcxx = new { pc.Enabled },
+        });
+    });
+
+    // PUT /api/admin/settings  — merge body into appsettings.json and save
+    admin.MapPut("/settings", async (HttpContext http, IOptions<ApiOptions> apiOpts) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+
+        JsonNode? body;
+        try { body = await JsonNode.ParseAsync(http.Request.Body); }
+        catch { return Results.BadRequest(new { error = "Invalid JSON body" }); }
+        if (body is null) return Results.BadRequest(new { error = "Empty body" });
+
+        // Read current appsettings.json
+        JsonNode root;
+        try
+        {
+            var existing = await File.ReadAllTextAsync(settingsPath, http.RequestAborted);
+            root = JsonNode.Parse(existing) ?? new JsonObject();
+        }
+        catch { root = new JsonObject(); }
+
+        // Merge each top-level section present in the body into the root document
+        if (body is JsonObject bodyObj)
+        {
+            foreach (var (key, value) in bodyObj)
+            {
+                if (value is JsonObject section && root[key] is JsonObject existing)
+                {
+                    // Merge: only update keys present in the submitted section
+                    foreach (var (k, v) in section)
+                        existing[k] = v?.DeepClone();
+                }
+                else
+                {
+                    root[key] = value?.DeepClone();
+                }
+            }
+        }
+
+        try
+        {
+            var json = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(settingsPath, json, http.RequestAborted);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Could not write settings file: {ex.Message}");
+        }
+
+        return Results.Ok(new { saved = true, note = "Restart the server for changes to take effect." });
+    });
+
+    // GET /api/admin/peers  — list all ARx and PCxx peers with their enabled state
+    admin.MapGet("/peers", (
+        HttpContext http,
+        IOptions<ApiOptions> apiOpts,
+        IOptions<ArxServerOptions> arxOpts,
+        IOptions<PcxxOptions> pcxxOpts) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+        return Results.Ok(new
+        {
+            arx  = arxOpts.Value.Peers.Select((p, i) => new
+                   { index = i, host = p.Host, port = p.Port, label = p.Label, enabled = p.Enabled }),
+            pcxx = pcxxOpts.Value.Peers.Select((p, i) => new
+                   { index = i, host = p.Host, port = p.Port, label = p.Label, enabled = p.Enabled }),
+        });
+    });
+
+    // PATCH /api/admin/peers/{type}/{index}/enabled  — toggle a peer without saving full settings
+    admin.MapPatch("/peers/{type}/{index}/enabled", async (
+        HttpContext http,
+        IOptions<ApiOptions> apiOpts,
+        string type,
+        int index) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+
+        JsonNode? body;
+        try { body = await JsonNode.ParseAsync(http.Request.Body); }
+        catch { return Results.BadRequest(new { error = "Expected JSON body: {\"enabled\": true/false}" }); }
+
+        var enabled = body?["enabled"]?.GetValue<bool>();
+        if (enabled is null) return Results.BadRequest(new { error = "Missing 'enabled' field" });
+
+        type = type.ToLowerInvariant();
+        if (type is not ("arx" or "pcxx"))
+            return Results.BadRequest(new { error = "type must be 'arx' or 'pcxx'" });
+
+        // Read, patch, write appsettings.json
+        JsonNode root;
+        try
+        {
+            var existing = await File.ReadAllTextAsync(settingsPath, http.RequestAborted);
+            root = JsonNode.Parse(existing) ?? new JsonObject();
+        }
+        catch { return Results.Problem("Could not read settings file"); }
+
+        var section = type == "arx" ? "Arx" : "Pcxx";
+        var peers = root[section]?["Peers"]?.AsArray();
+        if (peers is null || index < 0 || index >= peers.Count)
+            return Results.NotFound(new { error = $"Peer index {index} not found in {section}" });
+
+        var peer = peers[index];
+        if (peer is JsonObject peerObj)
+        {
+            peerObj["Enabled"] = enabled.Value;
+        }
+        else if (peer is JsonValue strVal && strVal.TryGetValue<string>(out var hostPort))
+        {
+            // Was stored as plain "host:port" string — upgrade to object form
+            var parts = hostPort.LastIndexOf(':') is int c && c > 0
+                ? new JsonObject { ["Host"] = hostPort[..c], ["Port"] = int.Parse(hostPort[(c+1)..]), ["Enabled"] = enabled.Value }
+                : new JsonObject { ["Host"] = hostPort, ["Port"] = type == "arx" ? 3608 : 7300, ["Enabled"] = enabled.Value };
+            peers[index] = parts;
+        }
+
+        try
+        {
+            var json = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(settingsPath, json, http.RequestAborted);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Could not write settings file: {ex.Message}");
+        }
+
+        return Results.Ok(new { type, index, enabled = enabled.Value });
     });
 
     await app.RunAsync();
