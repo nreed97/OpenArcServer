@@ -404,20 +404,34 @@ try
         IOptions<RbnOptions> rbnOpts,
         IOptions<SpotProcessingOptions> spotOpts,
         IOptions<ArxServerOptions> arxOpts,
-        IOptions<PcxxOptions> pcxxOpts) =>
+        IOptions<PcxxOptions> pcxxOpts,
+        IOptions<OpenArcServer.Core.Configuration.WebSocketOptions> wsOpts,
+        IOptions<DatabaseOptions> dbOpts) =>
     {
         if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
-        var s = srvOpts.Value; var t = telOpts.Value; var r = rbnOpts.Value;
-        var sp = spotOpts.Value; var a = arxOpts.Value; var pc = pcxxOpts.Value;
+        var s  = srvOpts.Value;  var t  = telOpts.Value;  var r  = rbnOpts.Value;
+        var sp = spotOpts.Value; var a  = arxOpts.Value;  var pc = pcxxOpts.Value;
+        var ws = wsOpts.Value;   var db = dbOpts.Value;
         return Results.Ok(new
         {
             Server = new { s.NodeCallsign, s.SysopCallsign, s.ServerName, s.MotdFile },
-            Telnet = new { t.Port, t.MaxConnections, t.IdleTimeoutMinutes, t.IntroMessage, t.WelcomeMessage },
+            Telnet = new
+            {
+                t.Enabled, t.Port, t.MaxConnections, t.IdleTimeoutMinutes,
+                t.IntroMessage, t.WelcomeMessage, t.LogoutMessage,
+                t.InvalidCallsignMessage, t.BlockedMessage
+            },
+            WebSocket = new { ws.Enabled, ws.Port },
             Rbn    = new { r.Enabled, r.Host, r.Port, r.Callsign, r.ReconnectDelaySeconds },
             SpotProcessing = new
             {
                 sp.MaxCommentLength, sp.MinFrequencyKhz, sp.MaxFrequencyKhz,
                 sp.EnableBadWordFilter, sp.EnableDuplicateDetection, sp.DuplicateWindowMinutes
+            },
+            Database = new
+            {
+                db.DxSpotRetentionDays, db.DxSpotMaxCount,
+                db.UserRetentionYears, db.AnnouncementRetentionDays, db.LogRetentionDays
             },
             Arx  = new { a.Enabled, a.Port, a.ReconnectDelaySeconds },
             Pcxx = new { pc.Enabled },
@@ -550,6 +564,111 @@ try
         }
 
         return Results.Ok(new { type, index, enabled = enabled.Value });
+    });
+
+    // GET /api/admin/motd  — read the MOTD file
+    admin.MapGet("/motd", async (
+        HttpContext http,
+        IOptions<ApiOptions> apiOpts,
+        IOptions<ServerOptions> srvOpts) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+        var motdPath = srvOpts.Value.MotdFile;
+        if (!Path.IsPathRooted(motdPath))
+            motdPath = Path.Combine(app.Environment.ContentRootPath, motdPath);
+        try
+        {
+            var text = File.Exists(motdPath) ? await File.ReadAllTextAsync(motdPath, http.RequestAborted) : "";
+            return Results.Ok(new { content = text });
+        }
+        catch (Exception ex) { return Results.Problem($"Could not read MOTD file: {ex.Message}"); }
+    });
+
+    // PUT /api/admin/motd  — write the MOTD file
+    admin.MapPut("/motd", async (
+        HttpContext http,
+        IOptions<ApiOptions> apiOpts,
+        IOptions<ServerOptions> srvOpts) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+        JsonNode? body;
+        try { body = await JsonNode.ParseAsync(http.Request.Body); }
+        catch { return Results.BadRequest(new { error = "Invalid JSON body" }); }
+        var content = body?["content"]?.GetValue<string>() ?? "";
+
+        var motdPath = srvOpts.Value.MotdFile;
+        if (!Path.IsPathRooted(motdPath))
+            motdPath = Path.Combine(app.Environment.ContentRootPath, motdPath);
+        try
+        {
+            var dir = Path.GetDirectoryName(motdPath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            await File.WriteAllTextAsync(motdPath, content, http.RequestAborted);
+            return Results.Ok(new { saved = true });
+        }
+        catch (Exception ex) { return Results.Problem($"Could not write MOTD file: {ex.Message}"); }
+    });
+
+    // GET /api/admin/filters/{name}  — name: badwords | callblock | connectblock | spotblock
+    admin.MapGet("/filters/{name}", async (
+        HttpContext http,
+        IOptions<ApiOptions> apiOpts,
+        IOptions<DataFileOptions> dataOpts,
+        string name) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+        var df = dataOpts.Value;
+        var path = name.ToLowerInvariant() switch
+        {
+            "badwords"     => df.BadWordPath,
+            "callblock"    => df.CallBlockPath,
+            "connectblock" => df.ConnectBlockPath,
+            "spotblock"    => df.DxSpotBlockPath,
+            _              => null,
+        };
+        if (path is null) return Results.NotFound(new { error = $"Unknown filter '{name}'. Valid: badwords, callblock, connectblock, spotblock" });
+        if (!Path.IsPathRooted(path))
+            path = Path.Combine(app.Environment.ContentRootPath, path);
+        try
+        {
+            var text = File.Exists(path) ? await File.ReadAllTextAsync(path, http.RequestAborted) : "";
+            return Results.Ok(new { name, content = text });
+        }
+        catch (Exception ex) { return Results.Problem($"Could not read filter file: {ex.Message}"); }
+    });
+
+    // PUT /api/admin/filters/{name}  — overwrite a filter file
+    admin.MapPut("/filters/{name}", async (
+        HttpContext http,
+        IOptions<ApiOptions> apiOpts,
+        IOptions<DataFileOptions> dataOpts,
+        string name) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+        var df = dataOpts.Value;
+        var path = name.ToLowerInvariant() switch
+        {
+            "badwords"     => df.BadWordPath,
+            "callblock"    => df.CallBlockPath,
+            "connectblock" => df.ConnectBlockPath,
+            "spotblock"    => df.DxSpotBlockPath,
+            _              => null,
+        };
+        if (path is null) return Results.NotFound(new { error = $"Unknown filter '{name}'." });
+        if (!Path.IsPathRooted(path))
+            path = Path.Combine(app.Environment.ContentRootPath, path);
+        JsonNode? body;
+        try { body = await JsonNode.ParseAsync(http.Request.Body); }
+        catch { return Results.BadRequest(new { error = "Invalid JSON body" }); }
+        var content = body?["content"]?.GetValue<string>() ?? "";
+        try
+        {
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            await File.WriteAllTextAsync(path, content, http.RequestAborted);
+            return Results.Ok(new { saved = true, name });
+        }
+        catch (Exception ex) { return Results.Problem($"Could not write filter file: {ex.Message}"); }
     });
 
     await app.RunAsync();

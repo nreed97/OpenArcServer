@@ -139,6 +139,15 @@
     .settings-actions { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
     #settings-result { font-size: 12px; }
     .restart-note { font-size: 11px; color: var(--yellow); margin-top: 6px; }
+
+    /* Filter tab buttons */
+    .filter-tab {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      border-radius: 4px; padding: 4px 14px; cursor: pointer; font-size: 12px;
+      transition: color .15s, border-color .15s;
+    }
+    .filter-tab:hover { color: var(--text); border-color: var(--muted); }
+    .filter-tab.active-filter-tab { color: var(--accent); border-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -247,6 +256,47 @@
     </div>
 
     <div id="admin-result"></div>
+
+    <div class="admin-form">
+      <h3>Message of the Day (MOTD)</h3>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">
+        Shown to users when they connect via Telnet. Saved to the MOTD file configured in Server Identity.
+        Changes take effect immediately (no restart needed).
+      </p>
+      <div class="form-row" style="align-items:flex-start">
+        <label style="padding-top:6px">MOTD</label>
+        <textarea id="motd-content" style="min-height:120px;font-family:'SFMono-Regular',Consolas,monospace;font-size:12px" placeholder="Enter message of the day…"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn" style="background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:12px;padding:5px 12px" onclick="loadMotd()">Reload</button>
+        <button class="btn" style="font-size:12px;padding:5px 12px" onclick="saveMotd()">Save MOTD</button>
+      </div>
+    </div>
+
+    <div class="admin-form">
+      <h3>Filter Lists</h3>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+        One entry per line. <strong>Bad Words</strong>: blocked spot comments.
+        <strong>Call Block</strong>: callsigns blocked from connecting.
+        <strong>Connect Block</strong>: blocked IP addresses or hostnames.
+        <strong>Spot Block</strong>: DX callsigns to suppress from spots.
+        Changes take effect on next server restart.
+      </p>
+      <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+        <button id="filter-tab-badwords"     onclick="showFilter('badwords')"     class="filter-tab active-filter-tab">Bad Words</button>
+        <button id="filter-tab-callblock"    onclick="showFilter('callblock')"    class="filter-tab">Call Block</button>
+        <button id="filter-tab-connectblock" onclick="showFilter('connectblock')" class="filter-tab">Connect Block</button>
+        <button id="filter-tab-spotblock"    onclick="showFilter('spotblock')"    class="filter-tab">Spot Block</button>
+      </div>
+      <div class="form-row" style="align-items:flex-start">
+        <label style="padding-top:6px" id="filter-label">Bad Words</label>
+        <textarea id="filter-content" style="min-height:160px;font-family:'SFMono-Regular',Consolas,monospace;font-size:12px" placeholder="Loading…"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn" style="background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:12px;padding:5px 12px" onclick="loadCurrentFilter()">Reload</button>
+        <button class="btn" style="font-size:12px;padding:5px 12px" onclick="saveCurrentFilter()">Save Filter</button>
+      </div>
+    </div>
   </div>
 
   <!-- Settings -->
@@ -291,6 +341,13 @@
       <!-- Telnet -->
       <div class="settings-section">
         <h3>Telnet Server</h3>
+        <div class="field">
+          <div class="field-row">
+            <input type="checkbox" id="cfg-TelnetEnabled" />
+            <label for="cfg-TelnetEnabled">Enable Telnet Server</label>
+          </div>
+          <div class="hint restart-note">⚠ Requires restart to enable/disable</div>
+        </div>
         <div class="field">
           <label>Port</label>
           <input type="number" id="cfg-TelnetPort" min="1" max="65535" />
@@ -424,6 +481,49 @@
         </div>
       </div>
 
+      <!-- WebSocket -->
+      <div class="settings-section">
+        <h3>WebSocket Server</h3>
+        <div class="field">
+          <div class="field-row">
+            <input type="checkbox" id="cfg-WsEnabled" />
+            <label for="cfg-WsEnabled">Enable WebSocket Server</label>
+          </div>
+          <div class="hint restart-note">⚠ Requires restart</div>
+        </div>
+        <div class="field">
+          <label>Port</label>
+          <input type="number" id="cfg-WsPort" min="1" max="65535" />
+          <div class="hint restart-note">⚠ Requires restart</div>
+        </div>
+      </div>
+
+      <!-- Database Retention -->
+      <div class="settings-section">
+        <h3>Database Retention</h3>
+        <div class="field">
+          <label>DX Spot Retention (days)</label>
+          <input type="number" id="cfg-DxSpotRetentionDays" min="1" max="365" />
+        </div>
+        <div class="field">
+          <label>Max Spots in DB</label>
+          <input type="number" id="cfg-DxSpotMaxCount" min="1000" max="2000000" />
+          <div class="hint">Older spots pruned when this limit is exceeded</div>
+        </div>
+        <div class="field">
+          <label>User Retention (years)</label>
+          <input type="number" id="cfg-UserRetentionYears" min="1" max="20" />
+        </div>
+        <div class="field">
+          <label>Announcement Retention (days)</label>
+          <input type="number" id="cfg-AnnouncementRetentionDays" min="1" max="365" />
+        </div>
+        <div class="field">
+          <label>Log Retention (days)</label>
+          <input type="number" id="cfg-LogRetentionDays" min="1" max="365" />
+        </div>
+      </div>
+
     </div><!-- .settings-grid -->
 
     <div class="settings-actions">
@@ -444,6 +544,8 @@ const WS_PORT  = 7374;
 
 // Shared admin key — persisted in sessionStorage so it survives tab switches
 let _adminKey = sessionStorage.getItem('adminKey') || '';
+let _settingsLoaded = false;   // guard: prevent saving before settings have been loaded
+let _currentFilter  = 'badwords'; // which filter file is currently shown
 function getAdminKey() { return _adminKey; }
 function setAdminKey(k) {
   _adminKey = k;
@@ -464,6 +566,7 @@ function showTab(name) {
   if (name === 'nodes')     loadNodes();
   if (name === 'propagation') loadProp();
   if (name === 'settings') loadSettings();
+  if (name === 'admin')    { loadMotd(); loadCurrentFilter(); }
 }
 
 // ── API helpers ───────────────────────────────────────────────────────────
@@ -702,6 +805,7 @@ async function loadSettings() {
     return;
   }
   resEl.textContent = '';
+  _settingsLoaded = true;
 
   // Server
   setField('cfg-NodeCallsign',   d.Server?.NodeCallsign);
@@ -710,11 +814,16 @@ async function loadSettings() {
   setField('cfg-MotdFile',       d.Server?.MotdFile);
 
   // Telnet
+  setCheck('cfg-TelnetEnabled',     d.Telnet?.Enabled);
   setField('cfg-TelnetPort',        d.Telnet?.Port);
   setField('cfg-MaxConnections',    d.Telnet?.MaxConnections);
   setField('cfg-IdleTimeoutMinutes',d.Telnet?.IdleTimeoutMinutes);
   setField('cfg-IntroMessage',      d.Telnet?.IntroMessage);
   setField('cfg-WelcomeMessage',    d.Telnet?.WelcomeMessage);
+
+  // WebSocket
+  setCheck('cfg-WsEnabled', d.WebSocket?.Enabled);
+  setField('cfg-WsPort',    d.WebSocket?.Port);
 
   // RBN
   setCheck('cfg-RbnEnabled',                d.Rbn?.Enabled);
@@ -731,9 +840,16 @@ async function loadSettings() {
   setField('cfg-MinFrequencyKhz',           d.SpotProcessing?.MinFrequencyKhz);
   setField('cfg-MaxFrequencyKhz',           d.SpotProcessing?.MaxFrequencyKhz);
 
+  // Database
+  setField('cfg-DxSpotRetentionDays',       d.Database?.DxSpotRetentionDays);
+  setField('cfg-DxSpotMaxCount',            d.Database?.DxSpotMaxCount);
+  setField('cfg-UserRetentionYears',        d.Database?.UserRetentionYears);
+  setField('cfg-AnnouncementRetentionDays', d.Database?.AnnouncementRetentionDays);
+  setField('cfg-LogRetentionDays',          d.Database?.LogRetentionDays);
+
   // Arx
-  setCheck('cfg-ArxEnabled',              d.Arx?.Enabled);
-  setField('cfg-ArxReconnectDelaySeconds', d.Arx?.ReconnectDelaySeconds);
+  setCheck('cfg-ArxEnabled',               d.Arx?.Enabled);
+  setField('cfg-ArxReconnectDelaySeconds',  d.Arx?.ReconnectDelaySeconds);
 
   // PCxx
   setCheck('cfg-PcxxEnabled', d.Pcxx?.Enabled);
@@ -847,47 +963,92 @@ function setCheck(id, val) {
   if (el && val !== undefined && val !== null) el.checked = !!val;
 }
 
+// ── Safe field-read helpers — return undefined on empty / NaN so compact() drops them ──
+function safeInt(id) {
+  const v = parseInt(document.getElementById(id)?.value);
+  return isNaN(v) ? undefined : v;
+}
+function safeFloat(id) {
+  const v = parseFloat(document.getElementById(id)?.value);
+  return isNaN(v) ? undefined : v;
+}
+function safeStr(id, transform) {
+  const el = document.getElementById(id);
+  if (!el) return undefined;
+  const v = el.value;
+  return transform ? transform(v) : v;
+}
+function safeBool(id) {
+  const el = document.getElementById(id);
+  return el ? el.checked : undefined;
+}
+// Remove keys whose value is undefined (keeps false, 0, "")
+function compact(obj) {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+}
+
 async function saveSettings(andRestart = false) {
   const resEl = document.getElementById('settings-result');
-  resEl.textContent = andRestart ? 'Saving…' : 'Saving…';
+
+  // Guard: never write settings before they've been loaded — prevents sending
+  // NaN/false/empty values that would corrupt appsettings.json.
+  if (!_settingsLoaded) {
+    resEl.style.color = 'var(--red)';
+    resEl.textContent = '⚠ Load settings first — click Reload';
+    return;
+  }
+
+  resEl.textContent = 'Saving…';
   resEl.style.color = 'var(--muted)';
 
   const body = {
-    Server: {
-      NodeCallsign:  document.getElementById('cfg-NodeCallsign').value.toUpperCase().trim(),
-      SysopCallsign: document.getElementById('cfg-SysopCallsign').value.toUpperCase().trim(),
-      ServerName:    document.getElementById('cfg-ServerName').value.trim(),
-      MotdFile:      document.getElementById('cfg-MotdFile').value.trim(),
-    },
-    Telnet: {
-      Port:               parseInt(document.getElementById('cfg-TelnetPort').value),
-      MaxConnections:     parseInt(document.getElementById('cfg-MaxConnections').value),
-      IdleTimeoutMinutes: parseInt(document.getElementById('cfg-IdleTimeoutMinutes').value),
-      IntroMessage:       document.getElementById('cfg-IntroMessage').value,
-      WelcomeMessage:     document.getElementById('cfg-WelcomeMessage').value,
-    },
-    Rbn: {
-      Enabled:              document.getElementById('cfg-RbnEnabled').checked,
-      Host:                 document.getElementById('cfg-RbnHost').value.trim(),
-      Port:                 parseInt(document.getElementById('cfg-RbnPort').value),
-      Callsign:             document.getElementById('cfg-RbnCallsign').value.toUpperCase().trim(),
-      ReconnectDelaySeconds:parseInt(document.getElementById('cfg-RbnReconnectDelaySeconds').value),
-    },
-    SpotProcessing: {
-      EnableDuplicateDetection: document.getElementById('cfg-EnableDuplicateDetection').checked,
-      DuplicateWindowMinutes:   parseInt(document.getElementById('cfg-DuplicateWindowMinutes').value),
-      EnableBadWordFilter:      document.getElementById('cfg-EnableBadWordFilter').checked,
-      MaxCommentLength:         parseInt(document.getElementById('cfg-MaxCommentLength').value),
-      MinFrequencyKhz:          parseFloat(document.getElementById('cfg-MinFrequencyKhz').value),
-      MaxFrequencyKhz:          parseFloat(document.getElementById('cfg-MaxFrequencyKhz').value),
-    },
-    Arx: {
-      Enabled:               document.getElementById('cfg-ArxEnabled').checked,
-      ReconnectDelaySeconds: parseInt(document.getElementById('cfg-ArxReconnectDelaySeconds').value),
-    },
-    Pcxx: {
-      Enabled: document.getElementById('cfg-PcxxEnabled').checked,
-    },
+    Server: compact({
+      NodeCallsign:  safeStr('cfg-NodeCallsign',  v => v.toUpperCase().trim()) || undefined,
+      SysopCallsign: safeStr('cfg-SysopCallsign', v => v.toUpperCase().trim()) || undefined,
+      ServerName:    safeStr('cfg-ServerName'),
+      MotdFile:      safeStr('cfg-MotdFile'),
+    }),
+    Telnet: compact({
+      Enabled:            safeBool('cfg-TelnetEnabled'),
+      Port:               safeInt('cfg-TelnetPort'),
+      MaxConnections:     safeInt('cfg-MaxConnections'),
+      IdleTimeoutMinutes: safeInt('cfg-IdleTimeoutMinutes'),
+      IntroMessage:       safeStr('cfg-IntroMessage'),
+      WelcomeMessage:     safeStr('cfg-WelcomeMessage'),
+    }),
+    WebSocket: compact({
+      Enabled: safeBool('cfg-WsEnabled'),
+      Port:    safeInt('cfg-WsPort'),
+    }),
+    Rbn: compact({
+      Enabled:               safeBool('cfg-RbnEnabled'),
+      Host:                  safeStr('cfg-RbnHost', v => v.trim()),
+      Port:                  safeInt('cfg-RbnPort'),
+      Callsign:              safeStr('cfg-RbnCallsign', v => v.toUpperCase().trim()),
+      ReconnectDelaySeconds: safeInt('cfg-RbnReconnectDelaySeconds'),
+    }),
+    SpotProcessing: compact({
+      EnableDuplicateDetection: safeBool('cfg-EnableDuplicateDetection'),
+      DuplicateWindowMinutes:   safeInt('cfg-DuplicateWindowMinutes'),
+      EnableBadWordFilter:      safeBool('cfg-EnableBadWordFilter'),
+      MaxCommentLength:         safeInt('cfg-MaxCommentLength'),
+      MinFrequencyKhz:          safeFloat('cfg-MinFrequencyKhz'),
+      MaxFrequencyKhz:          safeFloat('cfg-MaxFrequencyKhz'),
+    }),
+    Database: compact({
+      DxSpotRetentionDays:       safeInt('cfg-DxSpotRetentionDays'),
+      DxSpotMaxCount:            safeInt('cfg-DxSpotMaxCount'),
+      UserRetentionYears:        safeInt('cfg-UserRetentionYears'),
+      AnnouncementRetentionDays: safeInt('cfg-AnnouncementRetentionDays'),
+      LogRetentionDays:          safeInt('cfg-LogRetentionDays'),
+    }),
+    Arx: compact({
+      Enabled:               safeBool('cfg-ArxEnabled'),
+      ReconnectDelaySeconds: safeInt('cfg-ArxReconnectDelaySeconds'),
+    }),
+    Pcxx: compact({
+      Enabled: safeBool('cfg-PcxxEnabled'),
+    }),
   };
 
   const r = await apiAdmin('PUT', '/api/admin/settings', body);
@@ -931,6 +1092,71 @@ async function pollUntilBack() {
       resEl.textContent = 'Server did not come back — check process manager';
     }
   }, 2000);
+}
+
+// ── MOTD editor ───────────────────────────────────────────────────────────
+async function loadMotd() {
+  if (!getAdminKey()) return; // silent if no key yet
+  const r = await apiAdmin('GET', '/api/admin/motd');
+  if (r && r.content !== undefined) {
+    document.getElementById('motd-content').value = r.content;
+  } else if (r?.error) {
+    setResult('Could not load MOTD: ' + r.error, false);
+  }
+}
+
+async function saveMotd() {
+  if (!getAdminKey()) { setResult('Enter admin key first', false); return; }
+  const content = document.getElementById('motd-content').value;
+  const r = await apiAdmin('PUT', '/api/admin/motd', { content });
+  if (r && r.saved) {
+    setResult('✓ MOTD saved');
+  } else {
+    setResult('Could not save MOTD: ' + (r?.error || JSON.stringify(r)), false);
+  }
+}
+
+// ── Filter file editors ───────────────────────────────────────────────────
+const FILTER_LABELS = {
+  badwords: 'Bad Words', callblock: 'Call Block',
+  connectblock: 'Connect Block', spotblock: 'Spot Block',
+};
+
+function showFilter(name) {
+  _currentFilter = name;
+  // Update tab button styles
+  Object.keys(FILTER_LABELS).forEach(k => {
+    const btn = document.getElementById(`filter-tab-${k}`);
+    if (!btn) return;
+    if (k === name) btn.classList.add('active-filter-tab');
+    else            btn.classList.remove('active-filter-tab');
+  });
+  document.getElementById('filter-label').textContent = FILTER_LABELS[name] || name;
+  loadCurrentFilter();
+}
+
+async function loadCurrentFilter() {
+  if (!getAdminKey()) return; // silent if no key yet
+  const el = document.getElementById('filter-content');
+  if (el) el.value = 'Loading…';
+  const r = await apiAdmin('GET', `/api/admin/filters/${_currentFilter}`);
+  if (r && r.content !== undefined) {
+    if (el) el.value = r.content;
+  } else {
+    if (el) el.value = '';
+    if (r?.error) setResult('Could not load filter: ' + r.error, false);
+  }
+}
+
+async function saveCurrentFilter() {
+  if (!getAdminKey()) { setResult('Enter admin key first', false); return; }
+  const content = document.getElementById('filter-content').value;
+  const r = await apiAdmin('PUT', `/api/admin/filters/${_currentFilter}`, { content });
+  if (r && r.saved) {
+    setResult(`✓ ${FILTER_LABELS[_currentFilter] || _currentFilter} saved`);
+  } else {
+    setResult('Could not save filter: ' + (r?.error || JSON.stringify(r)), false);
+  }
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────
