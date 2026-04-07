@@ -122,7 +122,46 @@ if ! command -v unzip &>/dev/null; then
     esac
 fi
 
-# ── 1. Create service user ────────────────────────────────────────────────────
+# ── 1. Prompt for configuration ──────────────────────────────────────────────
+echo ""
+echo "==> Server configuration"
+
+# Node callsign
+read -rp "    Node callsign (e.g. W0NY-2): " NODE_CALLSIGN
+NODE_CALLSIGN="${NODE_CALLSIGN^^}"   # uppercase
+if [[ -z "$NODE_CALLSIGN" ]]; then
+    echo "ERROR: Node callsign is required." >&2
+    exit 1
+fi
+
+# Sysop callsign
+read -rp "    Sysop callsign (e.g. W0NY):   " SYSOP_CALLSIGN
+SYSOP_CALLSIGN="${SYSOP_CALLSIGN^^}"
+if [[ -z "$SYSOP_CALLSIGN" ]]; then
+    echo "ERROR: Sysop callsign is required." >&2
+    exit 1
+fi
+
+# Admin key — loop until non-empty
+while true; do
+    read -rsp "    Admin API key (hidden):       " ADMIN_KEY
+    echo ""
+    if [[ -n "$ADMIN_KEY" ]]; then
+        read -rsp "    Confirm admin key:            " ADMIN_KEY2
+        echo ""
+        if [[ "$ADMIN_KEY" == "$ADMIN_KEY2" ]]; then
+            break
+        else
+            echo "    Keys do not match — try again."
+        fi
+    else
+        echo "    Admin key cannot be empty — try again."
+    fi
+done
+
+echo ""
+
+# ── 3. Create service user ────────────────────────────────────────────────────
 if ! id "$SERVICE_USER" &>/dev/null; then
     echo "==> Creating system user: $SERVICE_USER"
     useradd --system --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
@@ -130,7 +169,7 @@ else
     echo "==> Service user '$SERVICE_USER' already exists — OK"
 fi
 
-# ── 2. Publish the application ────────────────────────────────────────────────
+# ── 4. Publish the application ────────────────────────────────────────────────
 echo "==> Publishing application..."
 cd "$(dirname "$0")/.."
 dotnet publish src/OpenArcServer.Server/OpenArcServer.Server.csproj \
@@ -138,27 +177,62 @@ dotnet publish src/OpenArcServer.Server/OpenArcServer.Server.csproj \
 dotnet publish src/OpenArcServer.Server/OpenArcServer.Server.csproj \
     -c Release -o "$INSTALL_DIR"
 
-# ── 3. Create data and log directories ───────────────────────────────────────
+# ── 5. Inject configuration into appsettings.json ────────────────────────────
+APPSETTINGS="$INSTALL_DIR/appsettings.json"
+echo "==> Writing configuration to $APPSETTINGS..."
+
+# Use python3 (always present) or node as a JSON patcher, falling back to sed
+patch_json() {
+    local FILE="$1" KEY_PATH="$2" VALUE="$3"
+    # KEY_PATH is dot-separated, e.g. "Server.NodeCallsign"
+    if command -v python3 &>/dev/null; then
+        python3 - "$FILE" "$KEY_PATH" "$VALUE" <<'PYEOF'
+import sys, json
+file, keypath, value = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(file) as f:
+    data = json.load(f)
+keys = keypath.split('.')
+obj = data
+for k in keys[:-1]:
+    obj = obj.setdefault(k, {})
+obj[keys[-1]] = value
+with open(file, 'w') as f:
+    json.dump(data, f, indent=2)
+PYEOF
+    else
+        # crude sed fallback — works for simple string replacements
+        local LAST_KEY="${KEY_PATH##*.}"
+        sed -i "s|\"${LAST_KEY}\": \"[^\"]*\"|\"${LAST_KEY}\": \"${VALUE}\"|g" "$FILE"
+    fi
+}
+
+patch_json "$APPSETTINGS" "Server.NodeCallsign"  "$NODE_CALLSIGN"
+patch_json "$APPSETTINGS" "Server.SysopCallsign" "$SYSOP_CALLSIGN"
+patch_json "$APPSETTINGS" "Api.AdminKey"          "$ADMIN_KEY"
+
+# ── 6. Create data and log directories ───────────────────────────────────────
 mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/logs"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 chmod 755 "$INSTALL_DIR/OpenArcServer.Server" 2>/dev/null || true
+# Restrict appsettings.json so the admin key isn't world-readable
+chmod 640 "$APPSETTINGS"
 
-# ── 4. Install systemd unit file ─────────────────────────────────────────────
+# ── 7. Install systemd unit file ─────────────────────────────────────────────
 echo "==> Installing systemd service..."
 sed "s|/opt/openarcserver|$INSTALL_DIR|g" deploy/openarcserver.service > "$SERVICE_FILE"
 chmod 644 "$SERVICE_FILE"
 
-# ── 5. Reload systemd and enable service ─────────────────────────────────────
+# ── 8. Reload systemd and enable service ─────────────────────────────────────
 systemctl daemon-reload
 systemctl enable openarcserver.service
 systemctl restart openarcserver.service
 
 echo ""
 echo "==> Installation complete!"
+echo "    Node:    $NODE_CALLSIGN  (sysop: $SYSOP_CALLSIGN)"
 echo "    Status:  systemctl status openarcserver"
 echo "    Logs:    journalctl -u openarcserver -f"
-echo "    Config:  $INSTALL_DIR/appsettings.json"
+echo "    Config:  $APPSETTINGS"
 echo "    Data:    $INSTALL_DIR/data/"
+echo "    Admin:   http://$(hostname -I | awk '{print $1}'):8080"
 echo ""
-echo "    IMPORTANT: Set an admin API key in appsettings.json:"
-echo '    "Api": { "AdminKey": "your-secret-key" }'
