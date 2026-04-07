@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using OpenArcServer.Core;
 using OpenArcServer.Core.Configuration;
 using OpenArcServer.Core.Services;
 using OpenArcServer.Data;
