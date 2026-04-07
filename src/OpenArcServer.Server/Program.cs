@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
@@ -64,6 +66,8 @@ try
     builder.Services.Configure<ArxServerOptions>(builder.Configuration.GetSection("Arx"));
     builder.Services.Configure<OpenArcServer.Core.Configuration.WebSocketOptions>(builder.Configuration.GetSection("WebSocket"));
     builder.Services.Configure<ApiOptions>(builder.Configuration.GetSection("Api"));
+    builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection("RateLimit"));
+    builder.Services.Configure<SpaceWeatherOptions>(builder.Configuration.GetSection("SpaceWeather"));
 
     // Data layer
     builder.Services.AddSingleton<DatabaseInitializer>();
@@ -73,39 +77,53 @@ try
     builder.Services.AddSingleton<IWxRepository, SqliteWxRepository>();
     builder.Services.AddSingleton<IBuddyRepository, SqliteBuddyRepository>();
 
-    // File-based lookups (registered as singletons, path resolved at startup)
-    builder.Services.AddSingleton<ICtyLookup>(sp =>
+    // File-based lookups — registered as concrete types (for reload) + interface aliases
+    builder.Services.AddSingleton<CtyDatParser>(sp =>
     {
         var opts = sp.GetRequiredService<IOptions<DataFileOptions>>().Value;
         return new CtyDatParser(opts.CtyDatPath);
     });
-    builder.Services.AddSingleton<IBandModeLookup>(sp =>
+    builder.Services.AddSingleton<ICtyLookup>(sp => sp.GetRequiredService<CtyDatParser>());
+
+    builder.Services.AddSingleton<BandModeParser>(sp =>
     {
         var opts = sp.GetRequiredService<IOptions<DataFileOptions>>().Value;
         return new BandModeParser(opts.BandModePath);
     });
+    builder.Services.AddSingleton<IBandModeLookup>(sp => sp.GetRequiredService<BandModeParser>());
 
-    // Named filter lists — register as keyed services
-    builder.Services.AddKeyedSingleton<IFilterList>("badwords", (sp, _) =>
+    // Named filter lists — concrete type for reload + keyed interface for injection
+    builder.Services.AddKeyedSingleton<FilterListParser>("badwords", (sp, _) =>
     {
         var opts = sp.GetRequiredService<IOptions<DataFileOptions>>().Value;
-        return (IFilterList)new FilterListParser(opts.BadWordPath);
+        return new FilterListParser(opts.BadWordPath);
     });
-    builder.Services.AddKeyedSingleton<IFilterList>("callblock", (sp, _) =>
+    builder.Services.AddKeyedSingleton<IFilterList>("badwords",
+        (sp, _) => (IFilterList)sp.GetRequiredKeyedService<FilterListParser>("badwords"));
+
+    builder.Services.AddKeyedSingleton<FilterListParser>("callblock", (sp, _) =>
     {
         var opts = sp.GetRequiredService<IOptions<DataFileOptions>>().Value;
-        return (IFilterList)new FilterListParser(opts.CallBlockPath);
+        return new FilterListParser(opts.CallBlockPath);
     });
-    builder.Services.AddKeyedSingleton<IFilterList>("connectblock", (sp, _) =>
+    builder.Services.AddKeyedSingleton<IFilterList>("callblock",
+        (sp, _) => (IFilterList)sp.GetRequiredKeyedService<FilterListParser>("callblock"));
+
+    builder.Services.AddKeyedSingleton<FilterListParser>("connectblock", (sp, _) =>
     {
         var opts = sp.GetRequiredService<IOptions<DataFileOptions>>().Value;
-        return (IFilterList)new FilterListParser(opts.ConnectBlockPath);
+        return new FilterListParser(opts.ConnectBlockPath);
     });
-    builder.Services.AddKeyedSingleton<IFilterList>("spotblock", (sp, _) =>
+    builder.Services.AddKeyedSingleton<IFilterList>("connectblock",
+        (sp, _) => (IFilterList)sp.GetRequiredKeyedService<FilterListParser>("connectblock"));
+
+    builder.Services.AddKeyedSingleton<FilterListParser>("spotblock", (sp, _) =>
     {
         var opts = sp.GetRequiredService<IOptions<DataFileOptions>>().Value;
-        return (IFilterList)new FilterListParser(opts.DxSpotBlockPath);
+        return new FilterListParser(opts.DxSpotBlockPath);
     });
+    builder.Services.AddKeyedSingleton<IFilterList>("spotblock",
+        (sp, _) => (IFilterList)sp.GetRequiredKeyedService<FilterListParser>("spotblock"));
 
     // Engine
     builder.Services.AddSingleton<DuplicateSpotDetector>();
@@ -130,6 +148,7 @@ try
     builder.Services.AddSingleton<ShowDxCommand>();
     builder.Services.AddSingleton<ShowUsersCommand>();
     builder.Services.AddSingleton<ShowNodesCommand>();
+    builder.Services.AddSingleton<ShowConnectCommand>();
     builder.Services.AddSingleton<ShowVersionCommand>();
     builder.Services.AddSingleton<ShowTimeCommand>();
     builder.Services.AddSingleton<ByeCommand>();
@@ -178,6 +197,7 @@ try
         router.Register("SH DX",          sp.GetRequiredService<ShowDxCommand>());
         router.Register("SH U",           sp.GetRequiredService<ShowUsersCommand>());
         router.Register("SH N",           sp.GetRequiredService<ShowNodesCommand>());
+        router.Register("SH CONNECT",     sp.GetRequiredService<ShowConnectCommand>());
         router.Register("SH VERSION",     sp.GetRequiredService<ShowVersionCommand>());
         router.Register("SH TIME",        sp.GetRequiredService<ShowTimeCommand>());
         router.Register("BYE",            sp.GetRequiredService<ByeCommand>());
@@ -238,6 +258,9 @@ try
 
     // Background maintenance
     builder.Services.AddHostedService<MaintenanceService>();
+
+    // Automated space weather (NOAA SWPC → WWV posts)
+    builder.Services.AddHostedService<SpaceWeatherService>();
 
     // Configure Kestrel to bind on the Api port
     builder.WebHost.ConfigureKestrel((ctx, opts) =>
@@ -305,12 +328,16 @@ try
     {
         var list = nodes.GetConnectedNodes().Select(n => new
         {
-            callsign        = n.Callsign,
-            software        = n.Software,
-            version         = n.Version,
-            remoteEndpoint  = n.RemoteEndpoint,
-            connectedAt     = n.ConnectedAt,
+            callsign          = n.Callsign,
+            software          = n.Software,
+            version           = n.Version,
+            remoteEndpoint    = n.RemoteEndpoint,
+            connectedAt       = n.ConnectedAt,
+            lastSeenAt        = n.LastSeenAt,
             handshakeComplete = n.HandshakeComplete,
+            spotsReceived     = n.SpotsReceived,
+            spotsSent         = n.SpotsSent,
+            lastSpotAt        = n.LastSpotAt,
         });
         return Results.Ok(list);
     });
@@ -425,8 +452,9 @@ try
             var text = await File.ReadAllTextAsync(settingsPath, http.RequestAborted);
             var root = JsonNode.Parse(text) as JsonObject;
             if (root is null) return Results.Problem("Could not parse settings file");
-            // Strip AdminKey so it is never sent to the browser
+            // Never send key material to the browser
             root["Api"]?.AsObject()?.Remove("AdminKey");
+            root["Api"]?.AsObject()?.Remove("AdminKeyHash");
             return Results.Ok(root);
         }
         catch (Exception ex)
@@ -677,6 +705,45 @@ try
         catch (Exception ex) { return Results.Problem($"Could not read filter file: {ex.Message}"); }
     });
 
+    // POST /api/admin/reload  — reload data files from disk without restarting
+    admin.MapPost("/reload", (
+        HttpContext http,
+        IOptions<ApiOptions> apiOpts,
+        IServiceProvider sp,
+        ILogger<Program> logger) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+
+        var df = sp.GetRequiredService<IOptions<DataFileOptions>>().Value;
+
+        sp.GetRequiredService<CtyDatParser>().Reload();
+        sp.GetRequiredService<BandModeParser>().Reload();
+        sp.GetRequiredKeyedService<FilterListParser>("badwords").Reload();
+        sp.GetRequiredKeyedService<FilterListParser>("callblock").Reload();
+        sp.GetRequiredKeyedService<FilterListParser>("connectblock").Reload();
+        sp.GetRequiredKeyedService<FilterListParser>("spotblock").Reload();
+
+        logger.LogInformation("Data files reloaded via admin API");
+        return Results.Ok(new { reloaded = true, files = new[]
+        {
+            df.CtyDatPath, df.BandModePath,
+            df.BadWordPath, df.CallBlockPath, df.ConnectBlockPath, df.DxSpotBlockPath,
+        }});
+    });
+
+    // POST /api/admin/keyhash  { "key": "yourpassword" }  — returns SHA-256 hex to paste into AdminKeyHash
+    admin.MapPost("/keyhash", async (HttpContext http, IOptions<ApiOptions> apiOpts) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+        JsonNode? body;
+        try { body = await JsonNode.ParseAsync(http.Request.Body); }
+        catch { return Results.BadRequest(new { error = "Invalid JSON body" }); }
+        var key = body?["key"]?.GetValue<string>() ?? "";
+        if (string.IsNullOrEmpty(key)) return Results.BadRequest(new { error = "key required" });
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))).ToLowerInvariant();
+        return Results.Ok(new { hash, note = "Paste this value into appsettings.json Api.AdminKeyHash and remove Api.AdminKey" });
+    });
+
     // PUT /api/admin/filters/{name}  — overwrite a filter file
     admin.MapPut("/filters/{name}", async (
         HttpContext http,
@@ -726,11 +793,28 @@ finally
 return 0;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Validates the X-Admin-Key request header.
+/// Prefers AdminKeyHash (SHA-256 hex); falls back to plaintext AdminKey for migration.
+/// Returns false (disabled) if neither is configured.
+/// </summary>
 static bool IsAdminAuthorized(HttpContext http, ApiOptions opts)
 {
-    if (string.IsNullOrEmpty(opts.AdminKey)) return false; // admin disabled unless key configured
     http.Request.Headers.TryGetValue("X-Admin-Key", out var provided);
-    return provided == opts.AdminKey;
+    var key = provided.ToString();
+    if (string.IsNullOrEmpty(key)) return false;
+
+    // Preferred path: compare SHA-256 hash of the supplied key
+    if (!string.IsNullOrEmpty(opts.AdminKeyHash))
+    {
+        var hash = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(key))).ToLowerInvariant();
+        return hash == opts.AdminKeyHash.ToLowerInvariant();
+    }
+
+    // Legacy fallback: plaintext comparison (set AdminKeyHash in production)
+    return !string.IsNullOrEmpty(opts.AdminKey) && key == opts.AdminKey;
 }
 
 // ── Request DTOs ──────────────────────────────────────────────────────────

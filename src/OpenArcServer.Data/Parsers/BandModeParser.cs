@@ -9,10 +9,12 @@ namespace OpenArcServer.Data.Parsers;
 /// </summary>
 public sealed class BandModeParser : IBandModeLookup
 {
-    private readonly BandModeEntry[] _entries;
+    private readonly string _filePath;
+    private volatile BandModeEntry[] _entries;
 
     public BandModeParser(string filePath)
     {
+        _filePath = filePath;
         _entries = Parse(filePath);
     }
 
@@ -26,6 +28,9 @@ public sealed class BandModeParser : IBandModeLookup
         }
         return null;
     }
+
+    /// <summary>Re-reads BandMode.dat from disk. Thread-safe via volatile reference swap.</summary>
+    public void Reload() => _entries = Parse(_filePath);
 
     private static BandModeEntry[] Parse(string filePath)
     {
