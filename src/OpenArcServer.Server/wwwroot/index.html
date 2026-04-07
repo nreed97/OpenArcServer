@@ -1094,8 +1094,10 @@ function safeFloat(id) {
 function safeStr(id, transform) {
   const el = document.getElementById(id);
   if (!el) return undefined;
-  const v = el.value;
-  return transform ? transform(v) : v;
+  const v = transform ? transform(el.value) : el.value;
+  // Return undefined for empty strings so compact() drops them and they
+  // don't overwrite existing config values with blank strings.
+  return v === '' ? undefined : v;
 }
 function safeBool(id) {
   const el = document.getElementById(id);
