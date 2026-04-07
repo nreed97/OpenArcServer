@@ -897,15 +897,30 @@ async function loadSpots(full) {
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────
+function connectTypeBadge(t) {
+  if (!t) return '—';
+  const map = {
+    TelnetUser:    ['tel',  'Telnet'],
+    ArxClient:     ['ft8',  'ARx2'],
+    WebSocketUser: ['digi', 'WebSocket'],
+    AgwBpqUser:    ['ssb',  'AGW/BPQ'],
+    PcxxUser:      ['ssb',  'PCxx'],
+    RcvOnly:       ['other','RcvOnly'],
+  };
+  const [cls, label] = map[t] || ['other', t];
+  return `<span class="badge badge-${cls}">${label}</span>`;
+}
+
 async function loadUsers() {
   const users = await apiFetch('/api/users');
   const el = document.getElementById('users-container');
   if (!users || users.length === 0) { el.innerHTML = '<div class="empty">No users connected</div>'; return; }
   el.innerHTML = `<table>
-    <thead><tr><th>Callsign</th><th>Name</th><th>QTH</th><th>Grid</th><th>Connected</th></tr></thead>
+    <thead><tr><th>Callsign</th><th>Via</th><th>Name</th><th>QTH</th><th>Grid</th><th>Connected</th></tr></thead>
     <tbody>
     ${users.map(u => `<tr>
       <td style="color:var(--accent);font-weight:600">${u.callsign}</td>
+      <td>${connectTypeBadge(u.connectType)}</td>
       <td>${u.name || '—'}</td>
       <td>${u.qth  || '—'}</td>
       <td>${u.grid || '—'}</td>
