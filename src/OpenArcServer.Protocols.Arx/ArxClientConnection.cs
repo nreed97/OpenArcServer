@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenArcServer.Core;
 using OpenArcServer.Core.Configuration;
+using OpenArcServer.Core.Models;
 using OpenArcServer.Core.Services;
 using OpenArcServer.Core.Sessions;
 
@@ -14,17 +15,22 @@ namespace OpenArcServer.Protocols.Arx;
 ///
 /// Protocol (confirmed from Wireshark capture of K1TTT AR-Cluster Server):
 ///   1. Server → Client: AB5K_LoginRqst (server introduces itself as ArcNode)
-///   2. Client → Server: AB5K_LoginResp (client provides callsign, Type=ArcUser)
+///   2. Client → Server: AB5K_LoginResp (client provides callsign; Type=ArcUser or ArcNode)
 ///   3. Server → Client: AB5K_Client_Dx frames for each DX spot broadcast
 ///
-/// Some clients also post spots as AB5K_Client_DxSpot frames on this connection
-/// after the login handshake, so incoming frames are processed via IArxMessageProcessor.
+/// Type=ArcNode means the connecting client is a peer AR-Cluster node — it is
+/// registered in INodeManager (shows in SH/N and /api/nodes) and NOT in
+/// IConnectionManager (so it doesn't appear in the user list).
+///
+/// Type=ArcUser (or any other value) means an end-user AR-Cluster client —
+/// registered in IConnectionManager so it shows in SH/U and /api/users.
 /// </summary>
 public sealed class ArxClientConnection
 {
     private readonly TcpClient _client;
     private readonly IArxClientRegistry _arxRegistry;
     private readonly IConnectionManager _connections;
+    private readonly INodeManager _nodes;
     private readonly IArxMessageProcessor _arxProcessor;
     private readonly ServerOptions _serverOpts;
     private readonly ILogger<ArxClientConnection> _log;
@@ -33,6 +39,7 @@ public sealed class ArxClientConnection
         TcpClient client,
         IArxClientRegistry arxRegistry,
         IConnectionManager connections,
+        INodeManager nodes,
         IArxMessageProcessor arxProcessor,
         IOptions<ServerOptions> serverOpts,
         ILogger<ArxClientConnection> log)
@@ -40,6 +47,7 @@ public sealed class ArxClientConnection
         _client       = client;
         _arxRegistry  = arxRegistry;
         _connections  = connections;
+        _nodes        = nodes;
         _arxProcessor = arxProcessor;
         _serverOpts   = serverOpts.Value;
         _log          = log;
@@ -48,7 +56,7 @@ public sealed class ArxClientConnection
     public async Task HandleAsync(CancellationToken ct)
     {
         var endpoint = _client.Client.RemoteEndPoint?.ToString() ?? "?";
-        _log.LogInformation("ARx2 client connecting from {Endpoint}", endpoint);
+        _log.LogInformation("ARx2 inbound connection from {Endpoint}", endpoint);
 
         UserSession? session = null;
         try
@@ -62,22 +70,26 @@ public sealed class ArxClientConnection
                 ("Type",    "ArcNode"));
             await stream.WriteAsync(ArxFrame.Wrap(loginRqst), ct);
 
-            // Step 2: read AB5K_LoginResp from client
-            var callsign = await ReadLoginRespAsync(stream, ct);
+            // Step 2: read AB5K_LoginResp from client — extract callsign AND type
+            var (callsign, loginType) = await ReadLoginRespAsync(stream, ct);
             if (string.IsNullOrWhiteSpace(callsign))
             {
-                _log.LogWarning("ARx2 client from {Endpoint} sent no valid login", endpoint);
+                _log.LogWarning("ARx2 inbound from {Endpoint}: no valid AB5K_LoginResp received", endpoint);
                 return;
             }
 
-            _log.LogInformation("ARx2 client logged in: {Callsign} from {Endpoint}", callsign, endpoint);
+            // Type=ArcNode → peer cluster node; anything else → end-user client
+            var isNode = string.Equals(loginType, "ArcNode", StringComparison.OrdinalIgnoreCase);
 
-            // Step 3: register session so MessageDistributor can push AB5K_Client_Dx frames
+            _log.LogInformation("ARx2 inbound: {Callsign} from {Endpoint} (Type={Type})",
+                callsign.ToUpperInvariant(), endpoint, loginType);
+
+            // Step 3: create session and register appropriately
             session = new UserSession
             {
-                Callsign       = callsign.ToUpperInvariant(),
-                RemoteEndpoint = endpoint,
-                ConnectType    = ConnectStateType.ArxClient,
+                Callsign        = callsign.ToUpperInvariant(),
+                RemoteEndpoint  = endpoint,
+                ConnectType     = isNode ? ConnectStateType.ArxNode : ConnectStateType.ArxClient,
                 ConnectionState = ConnectionState.Connected,
             };
             session.SendAsync = async (data, token) =>
@@ -85,8 +97,27 @@ public sealed class ArxClientConnection
                 var bytes = ArxFrame.Wrap(data);
                 await stream.WriteAsync(bytes, token);
             };
+
             _arxRegistry.Add(session);
-            _connections.AddSession(session);   // visible in SH/U and /api/users
+
+            if (isNode)
+            {
+                // Peer node — register in node list (SH/N and /api/nodes)
+                var nodeRecord = new NodeRecord
+                {
+                    Callsign          = session.Callsign,
+                    Software          = "AR-Cluster",
+                    Version           = "ARx2",
+                    RemoteEndpoint    = endpoint,
+                    HandshakeComplete = true,
+                };
+                _nodes.AddNode(nodeRecord, session);
+            }
+            else
+            {
+                // End-user — register in connection manager (SH/U and /api/users)
+                _connections.AddSession(session);
+            }
 
             // Read any ARx2 frames sent by the client after login
             // (e.g. AB5K_Client_DxSpot spot posting frames).
@@ -95,15 +126,14 @@ public sealed class ArxClientConnection
             while (!ct.IsCancellationRequested)
             {
                 int n = await stream.ReadAsync(buf, ct);
-                if (n == 0) break; // client disconnected
+                if (n == 0) break;
 
                 acc.AddRange(buf.AsSpan(0, n).ToArray());
 
-                // Extract and process all complete frames from the accumulator
                 while (true)
                 {
                     var xml = ArxFrame.TryExtract(acc.ToArray().AsSpan(), out int consumed);
-                    if (xml is null) break; // no complete frame yet
+                    if (xml is null) break;
                     acc.RemoveRange(0, consumed);
                     await _arxProcessor.ProcessAsync(session, xml, ct);
                 }
@@ -112,19 +142,23 @@ public sealed class ArxClientConnection
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or SocketException)
         {
-            _log.LogDebug("ARx2 client {Endpoint} disconnected: {Msg}", endpoint, ex.Message);
+            _log.LogDebug("ARx2 inbound {Endpoint} disconnected: {Msg}", endpoint, ex.Message);
         }
         catch (Exception ex)
         {
-            _log.LogWarning(ex, "ARx2 client {Endpoint} error", endpoint);
+            _log.LogWarning(ex, "ARx2 inbound {Endpoint} error", endpoint);
         }
         finally
         {
             if (session is not null)
             {
                 _arxRegistry.Remove(session.SessionId);
-                _connections.RemoveSession(session.SessionId);
-                _log.LogInformation("ARx2 client disconnected: {Callsign} from {Endpoint}",
+                if (session.ConnectType == ConnectStateType.ArxNode)
+                    _nodes.RemoveNode(session.Callsign);
+                else
+                    _connections.RemoveSession(session.SessionId);
+
+                _log.LogInformation("ARx2 inbound disconnected: {Callsign} from {Endpoint}",
                     session.Callsign, endpoint);
             }
             _client.Dispose();
@@ -132,10 +166,11 @@ public sealed class ArxClientConnection
     }
 
     /// <summary>
-    /// Read bytes from the stream until a complete [Arx2]...[/Arx2] frame is received,
-    /// parse it as AB5K_LoginResp, and return the client's callsign.
+    /// Read until a complete AB5K_LoginResp frame arrives.
+    /// Returns the client's callsign and Type field (e.g. "ArcUser" or "ArcNode").
     /// </summary>
-    private static async Task<string> ReadLoginRespAsync(NetworkStream stream, CancellationToken ct)
+    private static async Task<(string Callsign, string Type)> ReadLoginRespAsync(
+        NetworkStream stream, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(15));
@@ -150,19 +185,22 @@ public sealed class ArxClientConnection
             acc.AddRange(buf.AsSpan(0, n).ToArray());
 
             var xml = ArxFrame.TryExtract(acc.ToArray().AsSpan(), out _);
-            if (xml is null) continue; // frame incomplete, read more
+            if (xml is null) continue;
 
             try
             {
                 var root = XElement.Parse(xml);
                 if (root.Name.LocalName == "AB5K_LoginResp")
-                    return root.Element("Call")?.Value?.Trim() ?? string.Empty;
+                {
+                    var call = root.Element("Call")?.Value?.Trim() ?? string.Empty;
+                    var type = root.Element("Type")?.Value?.Trim() ?? string.Empty;
+                    return (call, type);
+                }
             }
             catch { }
 
-            // Got a frame but it wasn't AB5K_LoginResp — keep reading
             acc.Clear();
         }
-        return string.Empty;
+        return (string.Empty, string.Empty);
     }
 }

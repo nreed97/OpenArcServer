@@ -69,6 +69,7 @@ public sealed class ArxServer : BackgroundService
                         capturedClient,
                         sp.GetRequiredService<IArxClientRegistry>(),
                         sp.GetRequiredService<IConnectionManager>(),
+                        sp.GetRequiredService<INodeManager>(),
                         sp.GetRequiredService<IArxMessageProcessor>(),
                         sp.GetRequiredService<IOptions<ServerOptions>>(),
                         sp.GetRequiredService<ILogger<ArxClientConnection>>());
