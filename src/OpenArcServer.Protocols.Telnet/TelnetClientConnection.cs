@@ -307,6 +307,11 @@ public sealed class TelnetClientConnection
         profile.LastSeen = DateTime.UtcNow;
         await _users.UpdateAsync(profile, ct);
 
+        // Restore persisted profile fields so they survive server restarts
+        session.Name    = profile.Name;
+        session.Qth     = profile.Qth;
+        session.Grid    = profile.Grid;
+        session.Email   = profile.Email;
         session.DxCount = profile.DxCount;
 
         _connections.AddSession(session);
