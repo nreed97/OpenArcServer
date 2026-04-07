@@ -339,12 +339,12 @@
         <h3>Server Identity</h3>
         <div class="field">
           <label>Node Callsign</label>
-          <input type="text" id="cfg-NodeCallsign" placeholder="W0NY-2" style="text-transform:uppercase" />
+          <input type="text" id="cfg-NodeCallsign" placeholder="N0CALL-2" style="text-transform:uppercase" />
           <div class="hint">Your cluster node callsign (e.g. W0NY-2)</div>
         </div>
         <div class="field">
           <label>Sysop Callsign</label>
-          <input type="text" id="cfg-SysopCallsign" placeholder="W0NY" style="text-transform:uppercase" />
+          <input type="text" id="cfg-SysopCallsign" placeholder="N0CALL" style="text-transform:uppercase" />
         </div>
         <div class="field">
           <label>Server Name</label>
@@ -424,7 +424,7 @@
         </div>
         <div class="field">
           <label>Login Callsign</label>
-          <input type="text" id="cfg-RbnCallsign" placeholder="W0NY" style="text-transform:uppercase" />
+          <input type="text" id="cfg-RbnCallsign" placeholder="N0CALL" style="text-transform:uppercase" />
           <div class="hint">Callsign sent to RBN on login</div>
         </div>
         <div class="field">
@@ -667,6 +667,10 @@ function setAdminKey(k) {
   sessionStorage.setItem('adminKey', k);
   // Sync all key inputs on the page
   document.querySelectorAll('.admin-key-input').forEach(el => { if (el.value !== k) el.value = k; });
+  // If the settings tab is open and settings haven't loaded yet, load them now
+  if (k && !_settingsLoaded && document.getElementById('tab-settings')?.classList.contains('active')) {
+    loadSettings();
+  }
 }
 
 // ── Tab navigation ────────────────────────────────────────────────────────
@@ -908,8 +912,11 @@ async function kickUser() {
 async function loadSettings() {
   const resEl = document.getElementById('settings-result');
   if (!getAdminKey()) {
-    resEl.style.color = 'var(--muted)';
-    resEl.textContent = 'Enter admin key in the header to load settings';
+    resEl.style.color = 'var(--red)';
+    resEl.textContent = '⚠ Enter your admin key in the top-right header, then click Reload';
+    // Clear all fields so placeholders show instead of stale values
+    document.querySelectorAll('#tab-settings input[type=text], #tab-settings input[type=number]')
+      .forEach(el => el.value = '');
     return;
   }
   resEl.textContent = 'Loading…'; resEl.style.color = 'var(--muted)';
