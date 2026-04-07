@@ -522,6 +522,13 @@
           <label>Max Frequency (kHz)</label>
           <input type="number" id="cfg-MaxFrequencyKhz" min="30000" max="10000000" />
         </div>
+        <div class="field">
+          <div class="field-row">
+            <input type="checkbox" id="cfg-EnforceBandPlan" />
+            <label for="cfg-EnforceBandPlan">Enforce Amateur Band Plan</label>
+          </div>
+          <div class="hint">Reject spots on frequencies not present in BandMode.dat</div>
+        </div>
       </div>
 
       <!-- ARx Peers -->
@@ -672,6 +679,55 @@
           <input type="number" id="cfg-ApiPort" min="1" max="65535" placeholder="8080" />
           <div class="hint">Default: 8080 — Admin web dashboard is served on this port</div>
           <div class="hint restart-note">⚠ Requires restart</div>
+        </div>
+      </div>
+
+      <!-- Rate Limiting -->
+      <div class="settings-section">
+        <h3>Rate Limiting</h3>
+        <div class="field">
+          <div class="field-row">
+            <input type="checkbox" id="cfg-RlEnabled" />
+            <label for="cfg-RlEnabled">Enable Rate Limiting</label>
+          </div>
+          <div class="hint">Protects against command floods and connection storms</div>
+        </div>
+        <div class="field">
+          <label>Max Commands per User per Minute</label>
+          <input type="number" id="cfg-RlMaxCommandsPerMinute" min="10" max="600" placeholder="60" />
+          <div class="hint">Excess commands receive a warning; user stays connected</div>
+        </div>
+        <div class="field">
+          <label>Max New Connections per IP per Minute</label>
+          <input type="number" id="cfg-RlMaxConnectionsPerIpPerMinute" min="1" max="60" placeholder="5" />
+          <div class="hint">Excess connections from the same IP are silently dropped</div>
+        </div>
+      </div>
+
+      <!-- Space Weather -->
+      <div class="settings-section">
+        <h3>Space Weather (Auto-WWV)</h3>
+        <div class="field">
+          <div class="field-row">
+            <input type="checkbox" id="cfg-SwEnabled" />
+            <label for="cfg-SwEnabled">Enable Automated Space Weather</label>
+          </div>
+          <div class="hint">Fetches solar flux (SFI) and K-index from NOAA SWPC and posts as WWV</div>
+        </div>
+        <div class="field">
+          <label>Fetch Interval (minutes)</label>
+          <input type="number" id="cfg-SwFetchIntervalMinutes" min="15" max="1440" placeholder="60" />
+          <div class="hint">How often to query NOAA and post a new WWV report</div>
+        </div>
+        <div class="field">
+          <label>Initial Delay (minutes)</label>
+          <input type="number" id="cfg-SwInitialDelayMinutes" min="0" max="60" placeholder="2" />
+          <div class="hint">Wait after server start before the first fetch</div>
+        </div>
+        <div class="field">
+          <label>Auto-Spotter Callsign</label>
+          <input type="text" id="cfg-SwAutoSpotter" placeholder="NOAA-SWPC" style="text-transform:uppercase" />
+          <div class="hint">Callsign shown as the spotter on automated WWV reports</div>
         </div>
       </div>
 
@@ -1144,6 +1200,7 @@ async function loadSettings() {
   setField('cfg-MaxCommentLength',          d.SpotProcessing?.MaxCommentLength);
   setField('cfg-MinFrequencyKhz',           d.SpotProcessing?.MinFrequencyKhz);
   setField('cfg-MaxFrequencyKhz',           d.SpotProcessing?.MaxFrequencyKhz);
+  setCheck('cfg-EnforceBandPlan',           d.SpotProcessing?.EnforceBandPlan);
 
   // Database
   setField('cfg-DxSpotRetentionDays',       d.Database?.DxSpotRetentionDays);
@@ -1178,6 +1235,17 @@ async function loadSettings() {
   setField('cfg-PcxxNodeTimeoutMinutes',        d.Pcxx?.NodeTimeoutMinutes);
   setCheck('cfg-PcxxIgnoreNodeUserProtocol',    d.Pcxx?.IgnoreNodeUserProtocol);
   setCheck('cfg-PcxxLogOutboundNodeUser',       d.Pcxx?.LogOutboundNodeUser);
+
+  // RateLimit
+  setCheck('cfg-RlEnabled',                     d.RateLimit?.Enabled);
+  setField('cfg-RlMaxCommandsPerMinute',         d.RateLimit?.MaxCommandsPerMinute);
+  setField('cfg-RlMaxConnectionsPerIpPerMinute', d.RateLimit?.MaxConnectionsPerIpPerMinute);
+
+  // SpaceWeather
+  setCheck('cfg-SwEnabled',             d.SpaceWeather?.Enabled);
+  setField('cfg-SwFetchIntervalMinutes', d.SpaceWeather?.FetchIntervalMinutes);
+  setField('cfg-SwInitialDelayMinutes', d.SpaceWeather?.InitialDelayMinutes);
+  setField('cfg-SwAutoSpotter',         d.SpaceWeather?.AutoSpotter);
 
   // Load peer tables from dedicated endpoint
   await loadPeerTables();
@@ -1364,6 +1432,7 @@ async function saveSettings(andRestart = false) {
       MaxCommentLength:         safeInt('cfg-MaxCommentLength'),
       MinFrequencyKhz:          safeFloat('cfg-MinFrequencyKhz'),
       MaxFrequencyKhz:          safeFloat('cfg-MaxFrequencyKhz'),
+      EnforceBandPlan:          safeBool('cfg-EnforceBandPlan'),
     }),
     Database: compact({
       DxSpotRetentionDays:       safeInt('cfg-DxSpotRetentionDays'),
@@ -1398,6 +1467,17 @@ async function saveSettings(andRestart = false) {
       NodeTimeoutMinutes:      safeInt('cfg-PcxxNodeTimeoutMinutes'),
       IgnoreNodeUserProtocol:  safeBool('cfg-PcxxIgnoreNodeUserProtocol'),
       LogOutboundNodeUser:     safeBool('cfg-PcxxLogOutboundNodeUser'),
+    }),
+    RateLimit: compact({
+      Enabled:                       safeBool('cfg-RlEnabled'),
+      MaxCommandsPerMinute:          safeInt('cfg-RlMaxCommandsPerMinute'),
+      MaxConnectionsPerIpPerMinute:  safeInt('cfg-RlMaxConnectionsPerIpPerMinute'),
+    }),
+    SpaceWeather: compact({
+      Enabled:              safeBool('cfg-SwEnabled'),
+      FetchIntervalMinutes: safeInt('cfg-SwFetchIntervalMinutes'),
+      InitialDelayMinutes:  safeInt('cfg-SwInitialDelayMinutes'),
+      AutoSpotter:          safeStr('cfg-SwAutoSpotter', v => v.toUpperCase().trim()),
     }),
   };
 

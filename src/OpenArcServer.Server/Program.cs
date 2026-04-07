@@ -513,21 +513,28 @@ try
         return Results.Ok(new { saved = true, note = "Restart the server for changes to take effect." });
     });
 
-    // GET /api/admin/peers  — list all ARx and PCxx peers with their enabled state
-    admin.MapGet("/peers", (
+    // GET /api/admin/peers  — list all ARx and PCxx peers from disk (not IOptions cache)
+    admin.MapGet("/peers", async (
         HttpContext http,
-        IOptions<ApiOptions> apiOpts,
-        IOptions<ArxServerOptions> arxOpts,
-        IOptions<PcxxOptions> pcxxOpts) =>
+        IOptions<ApiOptions> apiOpts) =>
     {
         if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
-        return Results.Ok(new
+        try
         {
-            arx  = arxOpts.Value.Peers.Select((p, i) => new
-                   { index = i, host = p.Host, port = p.Port, label = p.Label, enabled = p.Enabled }),
-            pcxx = pcxxOpts.Value.Peers.Select((p, i) => new
-                   { index = i, host = p.Host, port = p.Port, label = p.Label, enabled = p.Enabled }),
-        });
+            var text = await File.ReadAllTextAsync(settingsPath, http.RequestAborted);
+            var root = JsonNode.Parse(text) as JsonObject;
+            if (root is null) return Results.Problem("Could not parse settings file");
+
+            return Results.Ok(new
+            {
+                arx  = ParsePeersFromJson(root["Arx"]?["Peers"],  3608),
+                pcxx = ParsePeersFromJson(root["Pcxx"]?["Peers"], 7300),
+            });
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Could not read settings file: {ex.Message}");
+        }
     });
 
     // PATCH /api/admin/peers/{type}/{index}/enabled  — toggle a peer without saving full settings
@@ -815,6 +822,35 @@ static bool IsAdminAuthorized(HttpContext http, ApiOptions opts)
 
     // Legacy fallback: plaintext comparison (set AdminKeyHash in production)
     return !string.IsNullOrEmpty(opts.AdminKey) && key == opts.AdminKey;
+}
+
+/// <summary>
+/// Parses a Peers JSON array from appsettings.json.
+/// Handles both plain "host:port" strings and full { Host, Port, Label, Enabled } objects.
+/// </summary>
+static IEnumerable<object> ParsePeersFromJson(JsonNode? peersNode, int defaultPort)
+{
+    if (peersNode is not JsonArray arr) return [];
+    return arr.Select((p, i) =>
+    {
+        string host; int port; string label; bool enabled;
+        if (p is JsonValue sv && sv.TryGetValue<string>(out var raw))
+        {
+            var c = raw.LastIndexOf(':');
+            host    = c > 0 ? raw[..c] : raw;
+            port    = c > 0 && int.TryParse(raw[(c + 1)..], out var pp) ? pp : defaultPort;
+            label   = string.Empty;
+            enabled = true;
+        }
+        else
+        {
+            host    = p?["Host"]?.GetValue<string>()  ?? string.Empty;
+            port    = p?["Port"]?.GetValue<int>()     ?? defaultPort;
+            label   = p?["Label"]?.GetValue<string>() ?? string.Empty;
+            enabled = p?["Enabled"]?.GetValue<bool>() ?? true;
+        }
+        return (object)new { index = i, host, port, label, enabled };
+    });
 }
 
 // ── Request DTOs ──────────────────────────────────────────────────────────
