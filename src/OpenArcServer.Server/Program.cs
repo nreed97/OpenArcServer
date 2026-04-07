@@ -281,23 +281,38 @@ try
         return Results.Ok(list);
     });
 
-    // GET /api/users
+    // GET /api/users  — only actual human users, not inter-node sessions
     api.MapGet("/users", (IConnectionManager connections) =>
     {
-        var users = connections.GetConnectedUsers().Select(s => new
-        {
-            callsign  = s.Callsign,
-            name      = s.Name,
-            qth       = s.Qth,
-            grid      = s.Grid,
-            connectedAt = s.ConnectedAt,
-        });
+        var users = connections.GetConnectedUsers()
+            .Where(s => s.ConnectType is not ConnectStateType.PcxxNode
+                                      and not ConnectStateType.ArxNode)
+            .Select(s => new
+            {
+                callsign    = s.Callsign,
+                name        = s.Name,
+                qth         = s.Qth,
+                grid        = s.Grid,
+                connectedAt = s.ConnectedAt,
+                connectType = s.ConnectType.ToString(),
+            });
         return Results.Ok(users);
     });
 
     // GET /api/nodes
     api.MapGet("/nodes", (INodeManager nodes) =>
-        Results.Ok(nodes.GetConnectedNodes()));
+    {
+        var list = nodes.GetConnectedNodes().Select(n => new
+        {
+            callsign        = n.Callsign,
+            software        = n.Software,
+            version         = n.Version,
+            remoteEndpoint  = n.RemoteEndpoint,
+            connectedAt     = n.ConnectedAt,
+            handshakeComplete = n.HandshakeComplete,
+        });
+        return Results.Ok(list);
+    });
 
     // GET /api/wwv[?count=N]
     api.MapGet("/wwv", async (IWwvRepository wwv, int count = 5) =>
@@ -393,63 +408,30 @@ try
         return Results.Ok(new { restarting = true, note = "Server is stopping. It will restart automatically if running under systemd or Windows Service." });
     });
 
-    // GET /api/admin/settings  — return current effective configuration
+    // GET /api/admin/settings  — return current appsettings.json from disk
+    // Reading from disk (not IOptions) ensures: (a) values match what was last saved,
+    // (b) keys keep their original PascalCase so the JS form can populate correctly,
+    // (c) changes saved from another device are reflected immediately.
     var settingsPath = Path.Combine(app.Environment.ContentRootPath, "appsettings.json");
 
-    admin.MapGet("/settings", (
+    admin.MapGet("/settings", async (
         HttpContext http,
-        IOptions<ApiOptions> apiOpts,
-        IOptions<ServerOptions> srvOpts,
-        IOptions<TelnetOptions> telOpts,
-        IOptions<RbnOptions> rbnOpts,
-        IOptions<SpotProcessingOptions> spotOpts,
-        IOptions<ArxServerOptions> arxOpts,
-        IOptions<PcxxOptions> pcxxOpts,
-        IOptions<OpenArcServer.Core.Configuration.WebSocketOptions> wsOpts,
-        IOptions<DatabaseOptions> dbOpts,
-        IOptions<DataFileOptions> dataFileOpts) =>
+        IOptions<ApiOptions> apiOpts) =>
     {
         if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
-        var s  = srvOpts.Value;  var t  = telOpts.Value;  var r  = rbnOpts.Value;
-        var sp = spotOpts.Value; var a  = arxOpts.Value;  var pc = pcxxOpts.Value;
-        var ws = wsOpts.Value;   var db = dbOpts.Value;   var df = dataFileOpts.Value;
-        var api = apiOpts.Value;
-        return Results.Ok(new
+        try
         {
-            Server = new { s.NodeCallsign, s.SysopCallsign, s.ServerName, s.MotdFile },
-            Telnet = new
-            {
-                t.Enabled, t.Port, t.BindAddress, t.MaxConnections, t.IdleTimeoutMinutes,
-                t.IntroMessage, t.WelcomeMessage, t.LogoutMessage,
-                t.InvalidCallsignMessage, t.BlockedMessage
-            },
-            WebSocket = new { ws.Enabled, ws.Port, ws.BindAddress },
-            Rbn    = new { r.Enabled, r.Host, r.Port, r.Callsign, r.ReconnectDelaySeconds },
-            SpotProcessing = new
-            {
-                sp.MaxCommentLength, sp.MinFrequencyKhz, sp.MaxFrequencyKhz,
-                sp.EnableBadWordFilter, sp.EnableDuplicateDetection, sp.DuplicateWindowMinutes
-            },
-            Database = new
-            {
-                db.DxSpotRetentionDays, db.DxSpotMaxCount,
-                db.UserRetentionYears, db.AnnouncementRetentionDays, db.LogRetentionDays
-            },
-            DataFiles = new
-            {
-                df.CtyDatPath, df.BandModePath, df.BadWordPath,
-                df.CallBlockPath, df.ConnectBlockPath, df.DxSpotBlockPath,
-                df.StatesPath, df.ProvincesPath
-            },
-            Arx  = new { a.Enabled, a.Port, a.BindAddress, a.ReconnectDelaySeconds },
-            Pcxx = new
-            {
-                pc.Enabled, pc.Port, pc.BindAddress, pc.MaxNodeConnections,
-                pc.PingIntervalSeconds, pc.NodeTimeoutMinutes,
-                pc.IgnoreNodeUserProtocol, pc.LogOutboundNodeUser
-            },
-            Api  = new { api.Port, api.BindAddress },   // AdminKey intentionally omitted
-        });
+            var text = await File.ReadAllTextAsync(settingsPath, http.RequestAborted);
+            var root = JsonNode.Parse(text) as JsonObject;
+            if (root is null) return Results.Problem("Could not parse settings file");
+            // Strip AdminKey so it is never sent to the browser
+            root["Api"]?.AsObject()?.Remove("AdminKey");
+            return Results.Ok(root);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Could not read settings file: {ex.Message}");
+        }
     });
 
     // PUT /api/admin/settings  — merge body into appsettings.json and save

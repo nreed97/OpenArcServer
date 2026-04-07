@@ -142,7 +142,7 @@ if [[ -z "$SYSOP_CALLSIGN" ]]; then
     exit 1
 fi
 
-# Admin key — loop until non-empty
+# Admin key — loop until non-empty with confirmation
 while true; do
     read -rsp "    Admin API key (hidden):       " ADMIN_KEY
     echo ""
@@ -158,6 +158,18 @@ while true; do
         echo "    Admin key cannot be empty — try again."
     fi
 done
+
+# Telnet port — default 7373
+read -rp "    Telnet port [7373]:            " TELNET_PORT_INPUT
+TELNET_PORT="${TELNET_PORT_INPUT:-7373}"
+if ! [[ "$TELNET_PORT" =~ ^[0-9]+$ ]] || (( TELNET_PORT < 1 || TELNET_PORT > 65535 )); then
+    echo "ERROR: Invalid port number '$TELNET_PORT'. Must be 1–65535." >&2
+    exit 1
+fi
+if (( TELNET_PORT < 1024 )); then
+    echo "    NOTE: Port $TELNET_PORT is below 1024. The service has CAP_NET_BIND_SERVICE so this"
+    echo "          will work, but 7373 is the conventional ham-cluster telnet port."
+fi
 
 echo ""
 
@@ -207,19 +219,26 @@ PYEOF
 patch_json "$APPSETTINGS" "Server.NodeCallsign"  "$NODE_CALLSIGN"
 patch_json "$APPSETTINGS" "Server.SysopCallsign" "$SYSOP_CALLSIGN"
 patch_json "$APPSETTINGS" "Api.AdminKey"          "$ADMIN_KEY"
+patch_json "$APPSETTINGS" "Rbn.Callsign"          "${SYSOP_CALLSIGN,,}"  # RBN login = lowercase sysop call
 
-# Ensure Telnet port is not a privileged port (<1024) unless the service
-# has CAP_NET_BIND_SERVICE — the service unit now grants this, but warn anyway.
+# Patch Telnet.Port as an integer (not string)
 if command -v python3 &>/dev/null; then
-    TELNET_PORT=$(python3 -c "
-import json, sys
-with open('$APPSETTINGS') as f: d=json.load(f)
-print(d.get('Telnet',{}).get('Port',7373))
-" 2>/dev/null || echo 7373)
-    if [[ "$TELNET_PORT" -lt 1024 ]]; then
-        echo "    NOTE: Telnet port is $TELNET_PORT (< 1024). The service has CAP_NET_BIND_SERVICE so this will work,"
-        echo "          but consider using port 7373 if you do not need the standard telnet port."
-    fi
+    python3 - "$APPSETTINGS" "Telnet.Port" "$TELNET_PORT" <<'PYEOF'
+import sys, json
+file, keypath, value = sys.argv[1], sys.argv[2], int(sys.argv[3])
+with open(file) as f:
+    data = json.load(f)
+keys = keypath.split('.')
+obj = data
+for k in keys[:-1]:
+    obj = obj.setdefault(k, {})
+obj[keys[-1]] = value
+with open(file, 'w') as f:
+    json.dump(data, f, indent=2)
+PYEOF
+else
+    # sed fallback for numeric port — replace the numeric value
+    sed -i "s|\"Port\": [0-9]*|\"Port\": ${TELNET_PORT}|" "$APPSETTINGS"
 fi
 
 # ── 6. Create data and log directories ───────────────────────────────────────
@@ -240,11 +259,21 @@ systemctl enable openarcserver.service
 systemctl restart openarcserver.service
 
 echo ""
+API_PORT=$(python3 -c "import json; d=json.load(open('$APPSETTINGS')); print(d.get('Api',{}).get('Port',8080))" 2>/dev/null || echo 8080)
+SERVER_IP=$(hostname -I | awk '{print $1}')
+
 echo "==> Installation complete!"
-echo "    Node:    $NODE_CALLSIGN  (sysop: $SYSOP_CALLSIGN)"
+echo "    Node:       $NODE_CALLSIGN  (sysop: $SYSOP_CALLSIGN)"
+echo ""
+echo "    Endpoints:"
+echo "      Telnet (users):  $SERVER_IP:$TELNET_PORT"
+echo "      ARx2   (nodes):  $SERVER_IP:3608"
+echo "      PCxx   (nodes):  $SERVER_IP:7300"
+echo "      WebSocket:       ws://$SERVER_IP:7374/ws/"
+echo "      Admin dashboard: http://$SERVER_IP:$API_PORT"
+echo ""
 echo "    Status:  systemctl status openarcserver"
 echo "    Logs:    journalctl -u openarcserver -f"
 echo "    Config:  $APPSETTINGS"
 echo "    Data:    $INSTALL_DIR/data/"
-echo "    Admin:   http://$(hostname -I | awk '{print $1}'):8080"
 echo ""

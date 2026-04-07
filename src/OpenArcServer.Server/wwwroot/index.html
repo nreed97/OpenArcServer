@@ -140,6 +140,35 @@
     #settings-result { font-size: 12px; }
     .restart-note { font-size: 11px; color: var(--yellow); margin-top: 6px; }
 
+    /* Login modal */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal-box {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 28px 32px; width: 360px; max-width: 95vw;
+    }
+    .modal-box h2 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+    .modal-box p  { font-size: 12px; color: var(--muted); margin-bottom: 18px; }
+    .modal-box label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing:.04em; }
+    .modal-box input[type=password] {
+      width: 100%; background: #010409; border: 1px solid var(--border); border-radius:4px;
+      color: var(--text); padding: 7px 10px; font-size:13px; margin-top:4px; margin-bottom:14px;
+    }
+    .modal-box input:focus { outline: none; border-color: var(--accent); }
+    #modal-error { font-size:12px; color: var(--red); min-height:16px; margin-bottom:10px; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; }
+
+    /* Endpoints table */
+    .endpoints-table { width:100%; border-collapse:collapse; }
+    .endpoints-table td { padding:6px 10px; font-size:12px; border-bottom:1px solid #21262d; }
+    .endpoints-table td:first-child { font-weight:600; font-family:monospace; color:var(--accent); white-space:nowrap; }
+    .endpoints-table td:nth-child(2) { color: var(--muted); font-size:11px; }
+    .endpoints-table td:last-child { font-family:monospace; color: var(--text); text-align:right; white-space:nowrap; }
+    .endpoints-table tr:last-child td { border-bottom:none; }
+
     /* Filter tab buttons */
     .filter-tab {
       background: none; border: 1px solid var(--border); color: var(--muted);
@@ -156,10 +185,15 @@
   <h1>OpenArcServer</h1>
   <span class="tag">Admin Dashboard</span>
   <div id="header-key-wrap">
-    <label for="header-admin-key">Admin Key</label>
-    <input type="password" id="header-admin-key" class="admin-key-input"
-           placeholder="Enter admin key…"
-           oninput="setAdminKey(this.value)" />
+    <span id="header-user-label" style="font-size:12px;color:var(--muted);display:none"></span>
+    <button id="header-login-btn" onclick="showLoginModal()"
+            style="background:var(--accent);color:#000;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-weight:600;font-size:12px">
+      Login
+    </button>
+    <button id="header-logout-btn" onclick="doLogout()" style="display:none;
+            background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:5px 14px;cursor:pointer;font-size:12px">
+      Log out
+    </button>
   </div>
   <div id="status-dot"></div>
   <span id="status-label">Disconnected</span>
@@ -187,6 +221,14 @@
       <div class="stat-card"><div class="label">Spots in DB</div><div class="value" id="stat-spots">—</div></div>
       <div class="stat-card"><div class="label">Server Time</div><div class="value" id="stat-time" style="font-size:16px">—</div></div>
     </div>
+    <!-- Server Endpoints -->
+    <div class="section-header" style="margin-bottom:10px"><h2>Server Endpoints</h2><button class="refresh-btn" onclick="loadEndpoints()">Refresh</button></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px;margin-bottom:20px">
+      <table class="endpoints-table" id="endpoints-table">
+        <tbody><tr><td colspan="3" style="color:var(--muted);text-align:center;font-size:12px">Loading…</td></tr></tbody>
+      </table>
+    </div>
+
     <div class="section-header"><h2>Recent DX Spots</h2><button class="refresh-btn" onclick="loadSpots()">Refresh</button></div>
     <div id="dash-spots-container"></div>
   </div>
@@ -195,9 +237,20 @@
   <div id="tab-spots" class="tab">
     <div class="section-header">
       <h2>DX Spots</h2>
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input id="spots-count" type="number" value="50" min="1" max="500" style="width:70px;background:#010409;border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-size:13px">
         <button class="refresh-btn" onclick="loadSpots(true)">Load</button>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;white-space:nowrap">
+          <input type="checkbox" id="spots-autorefresh" style="accent-color:var(--accent)"
+                 onchange="toggleSpotsAutoRefresh()" />
+          Auto-refresh
+        </label>
+        <select id="spots-interval" style="background:#010409;border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:4px;font-size:12px" onchange="toggleSpotsAutoRefresh()">
+          <option value="10">10 s</option>
+          <option value="30" selected>30 s</option>
+          <option value="60">60 s</option>
+        </select>
+        <span id="spots-refresh-label" style="font-size:11px;color:var(--muted)"></span>
       </div>
     </div>
     <div id="spots-container"></div>
@@ -213,6 +266,9 @@
   <div id="tab-nodes" class="tab">
     <div class="section-header"><h2>Connected Nodes</h2><button class="refresh-btn" onclick="loadNodes()">Refresh</button></div>
     <div id="nodes-container"></div>
+    <p style="font-size:11px;color:var(--muted);margin-top:10px">
+      Nodes are inter-cluster peers connected via PCxx or ARx2 protocols. Human users appear on the Users tab.
+    </p>
   </div>
 
   <!-- Propagation -->
@@ -369,7 +425,8 @@
         </div>
         <div class="field">
           <label>Port</label>
-          <input type="number" id="cfg-TelnetPort" min="1" max="65535" />
+          <input type="number" id="cfg-TelnetPort" min="1" max="65535" placeholder="7373" />
+          <div class="hint">Default: 7373</div>
           <div class="hint restart-note">⚠ Requires restart</div>
         </div>
         <div class="field">
@@ -420,7 +477,8 @@
         </div>
         <div class="field">
           <label>RBN Port</label>
-          <input type="number" id="cfg-RbnPort" min="1" max="65535" />
+          <input type="number" id="cfg-RbnPort" min="1" max="65535" placeholder="7000" />
+          <div class="hint">Default: 7000</div>
         </div>
         <div class="field">
           <label>Login Callsign</label>
@@ -478,8 +536,9 @@
         </div>
         <div class="field">
           <label>Listen Port</label>
-          <input type="number" id="cfg-ArxPort" min="1" max="65535" />
-          <div class="hint restart-note">⚠ Default 3608 — requires restart</div>
+          <input type="number" id="cfg-ArxPort" min="1" max="65535" placeholder="3608" />
+          <div class="hint">Default: 3608 (ARx2 native protocol)</div>
+          <div class="hint restart-note">⚠ Requires restart</div>
         </div>
         <div class="field">
           <label>Reconnect Delay (seconds)</label>
@@ -509,8 +568,9 @@
         </div>
         <div class="field">
           <label>Listen Port</label>
-          <input type="number" id="cfg-PcxxPort" min="1" max="65535" />
-          <div class="hint restart-note">⚠ Default 7300 — requires restart</div>
+          <input type="number" id="cfg-PcxxPort" min="1" max="65535" placeholder="7300" />
+          <div class="hint">Default: 7300 (DX Spider / PCxx protocol)</div>
+          <div class="hint restart-note">⚠ Requires restart</div>
         </div>
         <div class="field">
           <label>Max Node Connections</label>
@@ -560,7 +620,8 @@
         </div>
         <div class="field">
           <label>Port</label>
-          <input type="number" id="cfg-WsPort" min="1" max="65535" />
+          <input type="number" id="cfg-WsPort" min="1" max="65535" placeholder="7374" />
+          <div class="hint">Default: 7374 (WebSocket for browser/live feed)</div>
           <div class="hint restart-note">⚠ Requires restart</div>
         </div>
       </div>
@@ -608,8 +669,9 @@
         <h3>Admin API</h3>
         <div class="field">
           <label>API Port</label>
-          <input type="number" id="cfg-ApiPort" min="1" max="65535" />
-          <div class="hint restart-note">⚠ Default 8080 — requires restart. The page is served on this port.</div>
+          <input type="number" id="cfg-ApiPort" min="1" max="65535" placeholder="8080" />
+          <div class="hint">Default: 8080 — Admin web dashboard is served on this port</div>
+          <div class="hint restart-note">⚠ Requires restart</div>
         </div>
       </div>
 
@@ -651,26 +713,93 @@
 
 </main>
 
+<!-- Login modal -->
+<div id="login-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h2>OpenArcServer Admin</h2>
+    <p>Enter your admin key to access the dashboard. The key is configured in <code>appsettings.json</code> under <code>Api.AdminKey</code>.</p>
+    <label for="modal-key-input">Admin Key</label>
+    <input type="password" id="modal-key-input" placeholder="Enter admin key…"
+           onkeydown="if(event.key==='Enter') doLogin()" />
+    <div id="modal-error"></div>
+    <div class="modal-actions">
+      <button class="btn" style="background:var(--surface);border:1px solid var(--border);color:var(--text)" onclick="hideLoginModal()">Cancel</button>
+      <button class="btn" onclick="doLogin()">Login</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── Config ────────────────────────────────────────────────────────────────
 const API_BASE = `${location.protocol}//${location.hostname}:${location.port}`;
-// WebSocket connects to the cluster WS port (default 7374)
 const WS_PORT  = 7374;
 
-// Shared admin key — persisted in sessionStorage so it survives tab switches
-let _adminKey = sessionStorage.getItem('adminKey') || '';
-let _settingsLoaded = false;   // guard: prevent saving before settings have been loaded
-let _currentFilter  = 'badwords'; // which filter file is currently shown
+// Admin key — persisted in sessionStorage so it survives tab switches
+let _adminKey       = sessionStorage.getItem('adminKey') || '';
+let _settingsLoaded = false;
+let _currentFilter  = 'badwords';
+
 function getAdminKey() { return _adminKey; }
+
 function setAdminKey(k) {
   _adminKey = k;
   sessionStorage.setItem('adminKey', k);
-  // Sync all key inputs on the page
-  document.querySelectorAll('.admin-key-input').forEach(el => { if (el.value !== k) el.value = k; });
-  // If the settings tab is open and settings haven't loaded yet, load them now
-  if (k && !_settingsLoaded && document.getElementById('tab-settings')?.classList.contains('active')) {
+  updateAuthUI();
+  if (k && !_settingsLoaded && document.getElementById('tab-settings')?.classList.contains('active'))
     loadSettings();
+}
+
+function updateAuthUI() {
+  const loggedIn = !!_adminKey;
+  document.getElementById('header-login-btn').style.display  = loggedIn ? 'none'  : '';
+  document.getElementById('header-logout-btn').style.display = loggedIn ? ''      : 'none';
+  const lbl = document.getElementById('header-user-label');
+  lbl.style.display  = loggedIn ? '' : 'none';
+  lbl.textContent    = loggedIn ? 'Admin' : '';
+}
+
+// ── Login modal ───────────────────────────────────────────────────────────
+function showLoginModal() {
+  document.getElementById('login-modal').classList.remove('hidden');
+  document.getElementById('modal-error').textContent = '';
+  document.getElementById('modal-key-input').value = '';
+  setTimeout(() => document.getElementById('modal-key-input').focus(), 50);
+}
+function hideLoginModal() {
+  document.getElementById('login-modal').classList.add('hidden');
+}
+async function doLogin() {
+  const key = document.getElementById('modal-key-input').value.trim();
+  if (!key) { document.getElementById('modal-error').textContent = 'Enter your admin key.'; return; }
+  document.getElementById('modal-error').textContent = 'Verifying…';
+  // Test key against a lightweight admin endpoint
+  try {
+    const r = await fetch(API_BASE + '/api/admin/logs?lines=1', {
+      headers: { 'X-Admin-Key': key }
+    });
+    if (r.status === 401) {
+      document.getElementById('modal-error').textContent = 'Invalid admin key.';
+      return;
+    }
+    // Key is valid
+    setAdminKey(key);
+    hideLoginModal();
+    // Reload whichever tab is active
+    const activeTab = document.querySelector('.tab.active')?.id?.replace('tab-', '');
+    if (activeTab === 'settings') { _settingsLoaded = false; loadSettings(); }
+    if (activeTab === 'admin')    { loadLogs(); loadMotd(); loadCurrentFilter(); }
+    loadEndpoints();
+  } catch {
+    document.getElementById('modal-error').textContent = 'Could not reach server.';
   }
+}
+function doLogout() {
+  setAdminKey('');
+  _settingsLoaded = false;
+  // Clear settings fields
+  document.querySelectorAll('#tab-settings input[type=text],#tab-settings input[type=number]')
+    .forEach(el => el.value = '');
+  document.getElementById('settings-result').textContent = '';
 }
 
 // ── Tab navigation ────────────────────────────────────────────────────────
@@ -679,13 +808,13 @@ function showTab(name) {
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   event.target.classList.add('active');
-  if (name === 'dashboard') { loadStats(); loadSpots(); }
-  if (name === 'spots')     loadSpots(true);
-  if (name === 'users')     loadUsers();
-  if (name === 'nodes')     loadNodes();
+  if (name === 'dashboard')   { loadStats(); loadSpots(); loadEndpoints(); }
+  if (name === 'spots')       loadSpots(true);
+  if (name === 'users')       loadUsers();
+  if (name === 'nodes')       loadNodes();
   if (name === 'propagation') loadProp();
-  if (name === 'settings') loadSettings();
-  if (name === 'admin')    { loadLogs(); loadMotd(); loadCurrentFilter(); }
+  if (name === 'settings')    loadSettings();
+  if (name === 'admin')       { loadLogs(); loadMotd(); loadCurrentFilter(); }
 }
 
 // ── API helpers ───────────────────────────────────────────────────────────
@@ -791,15 +920,54 @@ async function loadNodes() {
   const el = document.getElementById('nodes-container');
   if (!nodes || nodes.length === 0) { el.innerHTML = '<div class="empty">No nodes connected</div>'; return; }
   el.innerHTML = `<table>
-    <thead><tr><th>Callsign</th><th>Software</th><th>Version</th><th>Connected</th></tr></thead>
+    <thead><tr><th>Callsign</th><th>Protocol</th><th>Software</th><th>Version</th><th>Endpoint</th><th>Connected</th></tr></thead>
     <tbody>
     ${nodes.map(n => `<tr>
       <td style="color:var(--accent);font-weight:600">${n.callsign}</td>
+      <td>${n.software === 'AR-Cluster' ? '<span class="badge badge-ft8">ARx2</span>' : '<span class="badge badge-ssb">PCxx</span>'}</td>
       <td>${n.software || '—'}</td>
       <td>${n.version  || '—'}</td>
+      <td style="color:var(--muted)">${n.remoteEndpoint || '—'}</td>
       <td>${fmtTime(n.connectedAt)}</td>
     </tr>`).join('')}
     </tbody></table>`;
+}
+
+// ── Endpoints panel ───────────────────────────────────────────────────────
+async function loadEndpoints() {
+  const el = document.getElementById('endpoints-table');
+  if (!el) return;
+
+  const host = location.hostname;
+  // Read ports from settings if logged in, otherwise use defaults
+  let telPort = 7373, arxPort = 3608, pcxxPort = 7300, wsPort = 7374, apiPort = parseInt(location.port) || 8080;
+  if (_adminKey) {
+    try {
+      const d = await apiAdmin('GET', '/api/admin/settings');
+      if (d && !d.error) {
+        telPort  = d.Telnet?.Port   || telPort;
+        arxPort  = d.Arx?.Port      || arxPort;
+        pcxxPort = d.Pcxx?.Port     || pcxxPort;
+        wsPort   = d.WebSocket?.Port || wsPort;
+        apiPort  = d.Api?.Port      || apiPort;
+      }
+    } catch { /* use defaults */ }
+  }
+
+  const rows = [
+    ['Telnet (User)',   'Ham radio client software, PuTTY, any telnet client', `${host}:${telPort}`],
+    ['ARx2 (Node)',     'AR-Cluster native peer-node protocol', `${host}:${arxPort}`],
+    ['PCxx (Node)',     'DX Spider / PCxx inter-node protocol', `${host}:${pcxxPort}`],
+    ['WebSocket',       'Live spot feed for browser / custom dashboards', `ws://${host}:${wsPort}/ws/`],
+    ['Admin API / Web', 'This dashboard, REST API, Prometheus metrics', `http://${host}:${apiPort}`],
+  ];
+
+  el.innerHTML = `<tbody>${rows.map(([name, desc, addr]) => `
+    <tr>
+      <td>${name}</td>
+      <td>${desc}</td>
+      <td>${addr}</td>
+    </tr>`).join('')}</tbody>`;
 }
 
 // ── Propagation ───────────────────────────────────────────────────────────
@@ -913,10 +1081,7 @@ async function loadSettings() {
   const resEl = document.getElementById('settings-result');
   if (!getAdminKey()) {
     resEl.style.color = 'var(--red)';
-    resEl.textContent = '⚠ Enter your admin key in the top-right header, then click Reload';
-    // Clear all fields so placeholders show instead of stale values
-    document.querySelectorAll('#tab-settings input[type=text], #tab-settings input[type=number]')
-      .forEach(el => el.value = '');
+    resEl.textContent = '⚠ Login required — click Login in the header';
     return;
   }
   resEl.textContent = 'Loading…'; resEl.style.color = 'var(--muted)';
@@ -1366,6 +1531,22 @@ async function saveCurrentFilter() {
   }
 }
 
+// ── Spots auto-refresh ────────────────────────────────────────────────────
+let _spotsTimer = null;
+function toggleSpotsAutoRefresh() {
+  const enabled  = document.getElementById('spots-autorefresh')?.checked;
+  const labelEl  = document.getElementById('spots-refresh-label');
+  clearInterval(_spotsTimer);
+  _spotsTimer = null;
+  if (enabled) {
+    const secs = parseInt(document.getElementById('spots-interval')?.value || 30);
+    _spotsTimer = setInterval(() => loadSpots(true), secs * 1000);
+    if (labelEl) labelEl.textContent = `Refreshing every ${secs}s`;
+  } else {
+    if (labelEl) labelEl.textContent = '';
+  }
+}
+
 // ── Utilities ─────────────────────────────────────────────────────────────
 function fmtTime(iso) {
   if (!iso) return '—';
@@ -1377,10 +1558,12 @@ function fmtDate(iso) {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
-// Restore persisted admin key into all key inputs
-document.querySelectorAll('.admin-key-input').forEach(el => el.value = _adminKey);
+updateAuthUI();
+// Show login modal on first visit (no stored key)
+if (!_adminKey) showLoginModal();
 loadStats();
 loadSpots();
+loadEndpoints();
 connectFeed();
 setInterval(loadStats, 15000);
 </script>
