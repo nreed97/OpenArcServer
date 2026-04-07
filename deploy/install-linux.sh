@@ -170,10 +170,8 @@ else
 fi
 
 # ── 4. Publish the application ────────────────────────────────────────────────
-echo "==> Publishing application..."
+echo "==> Building and publishing application..."
 cd "$(dirname "$0")/.."
-dotnet publish src/OpenArcServer.Server/OpenArcServer.Server.csproj \
-    -c Release -o "$INSTALL_DIR" --no-build 2>/dev/null || \
 dotnet publish src/OpenArcServer.Server/OpenArcServer.Server.csproj \
     -c Release -o "$INSTALL_DIR"
 
@@ -209,6 +207,20 @@ PYEOF
 patch_json "$APPSETTINGS" "Server.NodeCallsign"  "$NODE_CALLSIGN"
 patch_json "$APPSETTINGS" "Server.SysopCallsign" "$SYSOP_CALLSIGN"
 patch_json "$APPSETTINGS" "Api.AdminKey"          "$ADMIN_KEY"
+
+# Ensure Telnet port is not a privileged port (<1024) unless the service
+# has CAP_NET_BIND_SERVICE — the service unit now grants this, but warn anyway.
+if command -v python3 &>/dev/null; then
+    TELNET_PORT=$(python3 -c "
+import json, sys
+with open('$APPSETTINGS') as f: d=json.load(f)
+print(d.get('Telnet',{}).get('Port',7373))
+" 2>/dev/null || echo 7373)
+    if [[ "$TELNET_PORT" -lt 1024 ]]; then
+        echo "    NOTE: Telnet port is $TELNET_PORT (< 1024). The service has CAP_NET_BIND_SERVICE so this will work,"
+        echo "          but consider using port 7373 if you do not need the standard telnet port."
+    fi
+fi
 
 # ── 6. Create data and log directories ───────────────────────────────────────
 mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/logs"

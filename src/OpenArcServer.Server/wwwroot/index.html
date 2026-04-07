@@ -238,6 +238,25 @@
   <!-- Admin -->
   <div id="tab-admin" class="tab">
     <div class="admin-form">
+      <h3>Server Logs</h3>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <select id="log-lines" style="background:#010409;border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-size:12px">
+          <option value="100">Last 100 lines</option>
+          <option value="300" selected>Last 300 lines</option>
+          <option value="500">Last 500 lines</option>
+          <option value="1000">Last 1000 lines</option>
+        </select>
+        <button class="btn" style="background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:12px;padding:5px 12px" onclick="loadLogs()">Refresh</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer">
+          <input type="checkbox" id="log-autoscroll" checked style="accent-color:var(--accent)" />
+          Auto-scroll
+        </label>
+        <span id="log-file" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
+      </div>
+      <div id="log-box" style="background:#010409;border:1px solid var(--border);border-radius:6px;height:340px;overflow-y:auto;font-family:'SFMono-Regular',Consolas,monospace;font-size:11px;padding:8px;color:#8b949e;white-space:pre"></div>
+    </div>
+
+    <div class="admin-form">
       <h3>Broadcast Announcement</h3>
       <div class="form-row">
         <label>Message</label>
@@ -662,7 +681,7 @@ function showTab(name) {
   if (name === 'nodes')     loadNodes();
   if (name === 'propagation') loadProp();
   if (name === 'settings') loadSettings();
-  if (name === 'admin')    { loadMotd(); loadCurrentFilter(); }
+  if (name === 'admin')    { loadLogs(); loadMotd(); loadCurrentFilter(); }
 }
 
 // ── API helpers ───────────────────────────────────────────────────────────
@@ -1236,6 +1255,43 @@ async function pollUntilBack() {
       resEl.textContent = 'Server did not come back — check process manager';
     }
   }, 2000);
+}
+
+// ── Log viewer ────────────────────────────────────────────────────────────
+function logLineColor(line) {
+  if (line.includes(' FTL]') || line.includes(' ERR]')) return '#f85149';
+  if (line.includes(' WRN]')) return '#d29922';
+  if (line.includes(' INF]')) return '#e6edf3';
+  return '#8b949e';
+}
+
+async function loadLogs() {
+  if (!getAdminKey()) return;
+  const lines = document.getElementById('log-lines')?.value || 300;
+  const r = await apiAdmin('GET', `/api/admin/logs?lines=${lines}`);
+  if (!r || r.error) return;
+
+  const box = document.getElementById('log-box');
+  const fileEl = document.getElementById('log-file');
+  if (!box) return;
+
+  if (fileEl && r.file) fileEl.textContent = r.file;
+
+  if (!r.lines || r.lines.length === 0) {
+    box.textContent = '(no log entries yet)';
+    return;
+  }
+
+  // Build colored spans
+  box.innerHTML = r.lines.map(line => {
+    const color = logLineColor(line);
+    const escaped = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<span style="color:${color}">${escaped}\n</span>`;
+  }).join('');
+
+  if (document.getElementById('log-autoscroll')?.checked) {
+    box.scrollTop = box.scrollHeight;
+  }
 }
 
 // ── MOTD editor ───────────────────────────────────────────────────────────

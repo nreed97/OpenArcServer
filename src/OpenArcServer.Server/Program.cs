@@ -580,6 +580,49 @@ try
         return Results.Ok(new { type, index, enabled = enabled.Value });
     });
 
+    // GET /api/admin/logs?lines=N  — tail the current Serilog rolling log file
+    admin.MapGet("/logs", async (
+        HttpContext http,
+        IOptions<ApiOptions> apiOpts) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+
+        var linesParam = http.Request.Query["lines"].FirstOrDefault();
+        var count = int.TryParse(linesParam, out var n) ? Math.Clamp(n, 10, 2000) : 300;
+
+        var logDir = Path.Combine(app.Environment.ContentRootPath, "logs");
+        if (!Directory.Exists(logDir))
+            return Results.Ok(new { file = (string?)null, lines = Array.Empty<string>() });
+
+        // Serilog names files openarcserver20260407.log — pick the newest
+        var latest = Directory.GetFiles(logDir, "openarcserver*.log")
+            .OrderByDescending(f => f)
+            .FirstOrDefault();
+
+        if (latest is null)
+            return Results.Ok(new { file = (string?)null, lines = Array.Empty<string>() });
+
+        try
+        {
+            // Read with FileShare.ReadWrite so the open log file isn't locked
+            string[] allLines;
+            await using (var fs = new FileStream(latest, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            using (var sr = new StreamReader(fs))
+                allLines = (await sr.ReadToEndAsync(http.RequestAborted)).Split('\n');
+
+            var tail = allLines
+                .Where(l => l.Length > 0)
+                .TakeLast(count)
+                .ToArray();
+
+            return Results.Ok(new { file = Path.GetFileName(latest), lines = tail });
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Could not read log file: {ex.Message}");
+        }
+    });
+
     // GET /api/admin/motd  — read the MOTD file
     admin.MapGet("/motd", async (
         HttpContext http,
