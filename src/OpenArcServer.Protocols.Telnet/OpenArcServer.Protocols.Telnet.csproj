@@ -10,6 +10,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.5" />
     <PackageReference Include="prometheus-net" Version="8.2.1" />
     <PackageReference Include="System.IO.Pipelines" Version="10.0.5" />
+    <PackageReference Include="System.Threading.RateLimiting" Version="9.0.5" />
   </ItemGroup>
 
   <PropertyGroup>

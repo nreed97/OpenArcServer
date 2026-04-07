@@ -2,6 +2,7 @@ using System.Buffers;
 using System.IO.Pipelines;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenArcServer.Core;
@@ -27,6 +28,7 @@ public sealed class TelnetClientConnection
     private readonly TelnetOptions _opts;
     private readonly ServerOptions _serverOpts;
     private readonly ILogger<TelnetClientConnection> _log;
+    private readonly SlidingWindowRateLimiter? _rateLimiter;
 
     private static readonly Encoding _enc = Encoding.UTF8;
 
@@ -41,6 +43,7 @@ public sealed class TelnetClientConnection
         BuddyAlertService buddyAlerts,
         IOptions<TelnetOptions> opts,
         IOptions<ServerOptions> serverOpts,
+        IOptions<RateLimitOptions> rateLimitOpts,
         ILogger<TelnetClientConnection> log)
     {
         _client       = client;
@@ -54,6 +57,20 @@ public sealed class TelnetClientConnection
         _opts         = opts.Value;
         _serverOpts   = serverOpts.Value;
         _log          = log;
+
+        var rl = rateLimitOpts.Value;
+        if (rl.Enabled && rl.MaxCommandsPerMinute > 0)
+        {
+            _rateLimiter = new SlidingWindowRateLimiter(new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit          = rl.MaxCommandsPerMinute,
+                Window               = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow    = 6,   // 10-second buckets
+                QueueProcessingOrder = QueueProcessingOrder.NewestFirst,
+                QueueLimit           = 0,
+                AutoReplenishment    = true,
+            });
+        }
     }
 
     public async Task HandleAsync(CancellationToken ct)
@@ -100,6 +117,8 @@ public sealed class TelnetClientConnection
         }
         finally
         {
+            _rateLimiter?.Dispose();
+
             if (!string.IsNullOrEmpty(session.Callsign))
             {
                 // Fire buddy disconnect alerts before removing from session list
@@ -340,6 +359,17 @@ public sealed class TelnetClientConnection
     private async Task HandleCommandAsync(UserSession session, string line, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(line)) return;
+
+        // Per-user command rate limiting
+        if (_rateLimiter is not null)
+        {
+            using var lease = _rateLimiter.AttemptAcquire();
+            if (!lease.IsAcquired)
+            {
+                await session.SendAsync!("*** Too many commands — please slow down. ***\r\n", ct);
+                return;
+            }
+        }
 
         var request = CommandRequest.Parse(line);
         var context = new CommandContext { Session = session, Request = request };

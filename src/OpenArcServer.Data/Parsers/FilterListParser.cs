@@ -5,31 +5,42 @@ namespace OpenArcServer.Data.Parsers;
 /// <summary>
 /// Loads a simple line-per-entry text file (CallBlock.dat, ConnectBlock.dat, BadWord.dat).
 /// Lines starting with '#' or ';' are comments. Entries are trimmed and uppercased.
+/// Supports hot-reload via <see cref="Reload"/> — thread-safe through a volatile class reference.
 /// </summary>
 public sealed class FilterListParser : IFilterList
 {
-    private readonly HashSet<string> _entries;
-    private readonly List<string> _ordered;
+    // Reference type so volatile works correctly for atomic reference swap.
+    private sealed class FilterData
+    {
+        public readonly HashSet<string> Set;
+        public readonly List<string>    List;
+        public FilterData(HashSet<string> set, List<string> list) { Set = set; List = list; }
+    }
+
+    private readonly string _filePath;
+    private volatile FilterData _data;
 
     public FilterListParser(string filePath)
     {
-        (_entries, _ordered) = Parse(filePath);
+        _filePath = filePath;
+        _data     = Parse(filePath);
     }
 
-    public bool IsBlocked(string value)
-    {
-        return _entries.Contains(value.ToUpperInvariant().Trim());
-    }
+    public bool IsBlocked(string value) =>
+        _data.Set.Contains(value.ToUpperInvariant().Trim());
 
-    public IReadOnlyList<string> GetAll() => _ordered;
+    public IReadOnlyList<string> GetAll() => _data.List;
 
-    private static (HashSet<string>, List<string>) Parse(string filePath)
+    /// <summary>Re-reads the filter file from disk. Thread-safe via volatile reference swap.</summary>
+    public void Reload() => _data = Parse(_filePath);
+
+    private static FilterData Parse(string filePath)
     {
-        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var set  = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var list = new List<string>();
 
         if (!File.Exists(filePath))
-            return (set, list);
+            return new FilterData(set, list);
 
         foreach (var line in File.ReadLines(filePath))
         {
@@ -42,6 +53,6 @@ public sealed class FilterListParser : IFilterList
                 list.Add(entry);
         }
 
-        return (set, list);
+        return new FilterData(set, list);
     }
 }

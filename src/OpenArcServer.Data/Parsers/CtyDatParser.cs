@@ -11,13 +11,18 @@ namespace OpenArcServer.Data.Parsers;
 /// </summary>
 public sealed class CtyDatParser : ICtyLookup
 {
-    // Sorted longest-first for prefix matching
-    private readonly (string Prefix, CtyRecord Record)[] _prefixes;
+    private readonly string _filePath;
+    // Sorted longest-first for prefix matching; volatile for thread-safe reload.
+    private volatile (string Prefix, CtyRecord Record)[] _prefixes;
 
     public CtyDatParser(string filePath)
     {
+        _filePath = filePath;
         _prefixes = Parse(filePath);
     }
+
+    /// <summary>Re-reads CTY.DAT from disk. Thread-safe via volatile reference swap.</summary>
+    public void Reload() => _prefixes = Parse(_filePath);
 
     public CtyRecord? LookupCallsign(string callsign)
     {

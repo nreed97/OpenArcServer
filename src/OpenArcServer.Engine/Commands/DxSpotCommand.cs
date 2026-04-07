@@ -74,10 +74,18 @@ public sealed class DxSpotCommand : IArcCommand
 
         var (freq, call, comment) = parsed.Value;
 
-        // Validate frequency
+        // Validate frequency range
         if (freq < _opts.MinFrequencyKhz || freq > _opts.MaxFrequencyKhz)
         {
             resp.Messages.Add($"Invalid frequency {freq} kHz");
+            resp.DistroType = DistroType.ToRequester;
+            return;
+        }
+
+        // Band plan enforcement — reject spots outside recognized amateur bands
+        if (_opts.EnforceBandPlan && _bandMode.LookupFrequency(freq) is null)
+        {
+            resp.Messages.Add($"Frequency {freq} kHz is not in a recognized amateur band.");
             resp.DistroType = DistroType.ToRequester;
             return;
         }

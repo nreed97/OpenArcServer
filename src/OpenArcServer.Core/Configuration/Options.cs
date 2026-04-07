@@ -58,6 +58,11 @@ public sealed class SpotProcessingOptions
     public bool EnableBadWordFilter { get; set; } = true;
     public bool EnableDuplicateDetection { get; set; } = true;
     public int DuplicateWindowMinutes { get; set; } = 20;
+    /// <summary>
+    /// When true, spots on frequencies not present in BandMode.dat are rejected.
+    /// Prevents non-amateur-band spots from entering the cluster.
+    /// </summary>
+    public bool EnforceBandPlan { get; set; } = false;
 }
 
 /// <summary>
@@ -242,10 +247,37 @@ public sealed class ApiOptions
     public int Port { get; set; } = 8080;
     public string BindAddress { get; set; } = "0.0.0.0";
     /// <summary>
-    /// Optional API key for admin endpoints.  If empty, admin endpoints are disabled.
-    /// Set via environment variable OPENARCSERVER_ADMIN_KEY for production use.
+    /// Plaintext admin key (legacy).  Use AdminKeyHash instead for production.
+    /// If AdminKeyHash is set, this field is ignored.
     /// </summary>
     public string AdminKey { get; set; } = string.Empty;
+    /// <summary>
+    /// SHA-256 hex hash of the admin key (preferred over AdminKey).
+    /// Generate with: echo -n "yourpassword" | sha256sum
+    /// </summary>
+    public string AdminKeyHash { get; set; } = string.Empty;
+}
+
+/// <summary>Per-user command and per-IP connection rate limiting.</summary>
+public sealed class RateLimitOptions
+{
+    public bool Enabled { get; set; } = true;
+    /// <summary>Maximum commands a single user may send per minute. 0 = unlimited.</summary>
+    public int MaxCommandsPerMinute { get; set; } = 60;
+    /// <summary>Maximum new connections accepted from a single IP per minute. 0 = unlimited.</summary>
+    public int MaxConnectionsPerIpPerMinute { get; set; } = 5;
+}
+
+/// <summary>Automated space weather (WWV) fetching from NOAA SWPC.</summary>
+public sealed class SpaceWeatherOptions
+{
+    public bool Enabled { get; set; } = false;
+    /// <summary>Minutes between each NOAA fetch cycle.</summary>
+    public int FetchIntervalMinutes { get; set; } = 60;
+    /// <summary>Minutes to wait after startup before the first fetch.</summary>
+    public int InitialDelayMinutes { get; set; } = 2;
+    /// <summary>Callsign shown as the spotter on automated WWV reports.</summary>
+    public string AutoSpotter { get; set; } = "NOAA-SWPC";
 }
 
 /// <summary>

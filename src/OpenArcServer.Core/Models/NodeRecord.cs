@@ -12,4 +12,10 @@ public sealed class NodeRecord
     public DateTime LastSeenAt { get; set; } = DateTime.UtcNow;
     /// <summary>True once the PC18→PC38→PC19→PC20→PC22 handshake is complete.</summary>
     public bool HandshakeComplete { get; set; }
+    /// <summary>DX spots received from this peer node.</summary>
+    public long SpotsReceived { get; set; }
+    /// <summary>DX spots forwarded to this peer node.</summary>
+    public long SpotsSent { get; set; }
+    /// <summary>Timestamp of the last spot activity with this node.</summary>
+    public DateTime? LastSpotAt { get; set; }
 }
