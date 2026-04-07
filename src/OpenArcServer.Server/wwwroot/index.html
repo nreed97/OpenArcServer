@@ -370,6 +370,20 @@
           <input type="text" id="cfg-WelcomeMessage" />
           <div class="hint">Tokens: {Callsign}, {NodeCallsign}</div>
         </div>
+        <div class="field">
+          <label>Logout Message</label>
+          <input type="text" id="cfg-LogoutMessage" />
+          <div class="hint">Token: {NodeCallsign}</div>
+        </div>
+        <div class="field">
+          <label>Invalid Callsign Message</label>
+          <input type="text" id="cfg-InvalidCallsignMessage" />
+        </div>
+        <div class="field">
+          <label>Blocked Message</label>
+          <input type="text" id="cfg-BlockedMessage" />
+          <div class="hint">Shown to callsigns/IPs in the block lists</div>
+        </div>
       </div>
 
       <!-- RBN -->
@@ -439,9 +453,14 @@
         <div class="field">
           <div class="field-row">
             <input type="checkbox" id="cfg-ArxEnabled" />
-            <label for="cfg-ArxEnabled">Enable ARx Server (port 3608)</label>
+            <label for="cfg-ArxEnabled">Enable ARx Server</label>
           </div>
           <div class="hint restart-note">⚠ Requires restart</div>
+        </div>
+        <div class="field">
+          <label>Listen Port</label>
+          <input type="number" id="cfg-ArxPort" min="1" max="65535" />
+          <div class="hint restart-note">⚠ Default 3608 — requires restart</div>
         </div>
         <div class="field">
           <label>Reconnect Delay (seconds)</label>
@@ -465,9 +484,38 @@
         <div class="field">
           <div class="field-row">
             <input type="checkbox" id="cfg-PcxxEnabled" />
-            <label for="cfg-PcxxEnabled">Enable PCxx Server (port 7300)</label>
+            <label for="cfg-PcxxEnabled">Enable PCxx Server</label>
           </div>
           <div class="hint restart-note">⚠ Requires restart</div>
+        </div>
+        <div class="field">
+          <label>Listen Port</label>
+          <input type="number" id="cfg-PcxxPort" min="1" max="65535" />
+          <div class="hint restart-note">⚠ Default 7300 — requires restart</div>
+        </div>
+        <div class="field">
+          <label>Max Node Connections</label>
+          <input type="number" id="cfg-PcxxMaxNodeConnections" min="1" max="500" />
+        </div>
+        <div class="field">
+          <label>Ping Interval (seconds)</label>
+          <input type="number" id="cfg-PcxxPingIntervalSeconds" min="30" max="900" />
+        </div>
+        <div class="field">
+          <label>Node Timeout (minutes)</label>
+          <input type="number" id="cfg-PcxxNodeTimeoutMinutes" min="5" max="120" />
+        </div>
+        <div class="field">
+          <div class="field-row">
+            <input type="checkbox" id="cfg-PcxxIgnoreNodeUserProtocol" />
+            <label for="cfg-PcxxIgnoreNodeUserProtocol">Ignore PC19/PC21/PC16/PC17 topology msgs</label>
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-row">
+            <input type="checkbox" id="cfg-PcxxLogOutboundNodeUser" />
+            <label for="cfg-PcxxLogOutboundNodeUser">Log outbound node protocol messages</label>
+          </div>
         </div>
         <div class="field">
           <label>Outbound Peers</label>
@@ -495,6 +543,54 @@
           <label>Port</label>
           <input type="number" id="cfg-WsPort" min="1" max="65535" />
           <div class="hint restart-note">⚠ Requires restart</div>
+        </div>
+      </div>
+
+      <!-- Data Files -->
+      <div class="settings-section">
+        <h3>Data File Paths</h3>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:10px">Paths are relative to the server binary directory. Requires restart to apply.</p>
+        <div class="field">
+          <label>CTY Data (cty.dat)</label>
+          <input type="text" id="cfg-CtyDatPath" placeholder="data/cty_wt_mod.dat" />
+        </div>
+        <div class="field">
+          <label>Band/Mode Data</label>
+          <input type="text" id="cfg-BandModePath" placeholder="data/BandMode.dat" />
+        </div>
+        <div class="field">
+          <label>Bad Word Filter</label>
+          <input type="text" id="cfg-BadWordPath" placeholder="data/BadWord.dat" />
+        </div>
+        <div class="field">
+          <label>Call Block List</label>
+          <input type="text" id="cfg-CallBlockPath" placeholder="data/CallBlock.dat" />
+        </div>
+        <div class="field">
+          <label>Connect Block List</label>
+          <input type="text" id="cfg-ConnectBlockPath" placeholder="data/ConnectBlock.dat" />
+        </div>
+        <div class="field">
+          <label>DX Spot Block List</label>
+          <input type="text" id="cfg-DxSpotBlockPath" placeholder="data/DxSpotBlock.dat" />
+        </div>
+        <div class="field">
+          <label>States Data</label>
+          <input type="text" id="cfg-StatesPath" placeholder="data/States.dat" />
+        </div>
+        <div class="field">
+          <label>Provinces Data</label>
+          <input type="text" id="cfg-ProvincesPath" placeholder="data/Provinces.dat" />
+        </div>
+      </div>
+
+      <!-- API / Admin -->
+      <div class="settings-section">
+        <h3>Admin API</h3>
+        <div class="field">
+          <label>API Port</label>
+          <input type="number" id="cfg-ApiPort" min="1" max="65535" />
+          <div class="hint restart-note">⚠ Default 8080 — requires restart. The page is served on this port.</div>
         </div>
       </div>
 
@@ -814,12 +910,15 @@ async function loadSettings() {
   setField('cfg-MotdFile',       d.Server?.MotdFile);
 
   // Telnet
-  setCheck('cfg-TelnetEnabled',     d.Telnet?.Enabled);
-  setField('cfg-TelnetPort',        d.Telnet?.Port);
-  setField('cfg-MaxConnections',    d.Telnet?.MaxConnections);
-  setField('cfg-IdleTimeoutMinutes',d.Telnet?.IdleTimeoutMinutes);
-  setField('cfg-IntroMessage',      d.Telnet?.IntroMessage);
-  setField('cfg-WelcomeMessage',    d.Telnet?.WelcomeMessage);
+  setCheck('cfg-TelnetEnabled',        d.Telnet?.Enabled);
+  setField('cfg-TelnetPort',           d.Telnet?.Port);
+  setField('cfg-MaxConnections',       d.Telnet?.MaxConnections);
+  setField('cfg-IdleTimeoutMinutes',   d.Telnet?.IdleTimeoutMinutes);
+  setField('cfg-IntroMessage',         d.Telnet?.IntroMessage);
+  setField('cfg-WelcomeMessage',       d.Telnet?.WelcomeMessage);
+  setField('cfg-LogoutMessage',        d.Telnet?.LogoutMessage);
+  setField('cfg-InvalidCallsignMessage', d.Telnet?.InvalidCallsignMessage);
+  setField('cfg-BlockedMessage',       d.Telnet?.BlockedMessage);
 
   // WebSocket
   setCheck('cfg-WsEnabled', d.WebSocket?.Enabled);
@@ -847,12 +946,32 @@ async function loadSettings() {
   setField('cfg-AnnouncementRetentionDays', d.Database?.AnnouncementRetentionDays);
   setField('cfg-LogRetentionDays',          d.Database?.LogRetentionDays);
 
+  // DataFiles
+  setField('cfg-CtyDatPath',       d.DataFiles?.CtyDatPath);
+  setField('cfg-BandModePath',     d.DataFiles?.BandModePath);
+  setField('cfg-BadWordPath',      d.DataFiles?.BadWordPath);
+  setField('cfg-CallBlockPath',    d.DataFiles?.CallBlockPath);
+  setField('cfg-ConnectBlockPath', d.DataFiles?.ConnectBlockPath);
+  setField('cfg-DxSpotBlockPath',  d.DataFiles?.DxSpotBlockPath);
+  setField('cfg-StatesPath',       d.DataFiles?.StatesPath);
+  setField('cfg-ProvincesPath',    d.DataFiles?.ProvincesPath);
+
+  // API
+  setField('cfg-ApiPort', d.Api?.Port);
+
   // Arx
   setCheck('cfg-ArxEnabled',               d.Arx?.Enabled);
+  setField('cfg-ArxPort',                  d.Arx?.Port);
   setField('cfg-ArxReconnectDelaySeconds',  d.Arx?.ReconnectDelaySeconds);
 
   // PCxx
-  setCheck('cfg-PcxxEnabled', d.Pcxx?.Enabled);
+  setCheck('cfg-PcxxEnabled',                   d.Pcxx?.Enabled);
+  setField('cfg-PcxxPort',                      d.Pcxx?.Port);
+  setField('cfg-PcxxMaxNodeConnections',        d.Pcxx?.MaxNodeConnections);
+  setField('cfg-PcxxPingIntervalSeconds',       d.Pcxx?.PingIntervalSeconds);
+  setField('cfg-PcxxNodeTimeoutMinutes',        d.Pcxx?.NodeTimeoutMinutes);
+  setCheck('cfg-PcxxIgnoreNodeUserProtocol',    d.Pcxx?.IgnoreNodeUserProtocol);
+  setCheck('cfg-PcxxLogOutboundNodeUser',       d.Pcxx?.LogOutboundNodeUser);
 
   // Load peer tables from dedicated endpoint
   await loadPeerTables();
@@ -1009,12 +1128,15 @@ async function saveSettings(andRestart = false) {
       MotdFile:      safeStr('cfg-MotdFile'),
     }),
     Telnet: compact({
-      Enabled:            safeBool('cfg-TelnetEnabled'),
-      Port:               safeInt('cfg-TelnetPort'),
-      MaxConnections:     safeInt('cfg-MaxConnections'),
-      IdleTimeoutMinutes: safeInt('cfg-IdleTimeoutMinutes'),
-      IntroMessage:       safeStr('cfg-IntroMessage'),
-      WelcomeMessage:     safeStr('cfg-WelcomeMessage'),
+      Enabled:                safeBool('cfg-TelnetEnabled'),
+      Port:                   safeInt('cfg-TelnetPort'),
+      MaxConnections:         safeInt('cfg-MaxConnections'),
+      IdleTimeoutMinutes:     safeInt('cfg-IdleTimeoutMinutes'),
+      IntroMessage:           safeStr('cfg-IntroMessage'),
+      WelcomeMessage:         safeStr('cfg-WelcomeMessage'),
+      LogoutMessage:          safeStr('cfg-LogoutMessage'),
+      InvalidCallsignMessage: safeStr('cfg-InvalidCallsignMessage'),
+      BlockedMessage:         safeStr('cfg-BlockedMessage'),
     }),
     WebSocket: compact({
       Enabled: safeBool('cfg-WsEnabled'),
@@ -1042,12 +1164,32 @@ async function saveSettings(andRestart = false) {
       AnnouncementRetentionDays: safeInt('cfg-AnnouncementRetentionDays'),
       LogRetentionDays:          safeInt('cfg-LogRetentionDays'),
     }),
+    DataFiles: compact({
+      CtyDatPath:       safeStr('cfg-CtyDatPath'),
+      BandModePath:     safeStr('cfg-BandModePath'),
+      BadWordPath:      safeStr('cfg-BadWordPath'),
+      CallBlockPath:    safeStr('cfg-CallBlockPath'),
+      ConnectBlockPath: safeStr('cfg-ConnectBlockPath'),
+      DxSpotBlockPath:  safeStr('cfg-DxSpotBlockPath'),
+      StatesPath:       safeStr('cfg-StatesPath'),
+      ProvincesPath:    safeStr('cfg-ProvincesPath'),
+    }),
+    Api: compact({
+      Port: safeInt('cfg-ApiPort'),
+    }),
     Arx: compact({
       Enabled:               safeBool('cfg-ArxEnabled'),
+      Port:                  safeInt('cfg-ArxPort'),
       ReconnectDelaySeconds: safeInt('cfg-ArxReconnectDelaySeconds'),
     }),
     Pcxx: compact({
-      Enabled: safeBool('cfg-PcxxEnabled'),
+      Enabled:                 safeBool('cfg-PcxxEnabled'),
+      Port:                    safeInt('cfg-PcxxPort'),
+      MaxNodeConnections:      safeInt('cfg-PcxxMaxNodeConnections'),
+      PingIntervalSeconds:     safeInt('cfg-PcxxPingIntervalSeconds'),
+      NodeTimeoutMinutes:      safeInt('cfg-PcxxNodeTimeoutMinutes'),
+      IgnoreNodeUserProtocol:  safeBool('cfg-PcxxIgnoreNodeUserProtocol'),
+      LogOutboundNodeUser:     safeBool('cfg-PcxxLogOutboundNodeUser'),
     }),
   };
 

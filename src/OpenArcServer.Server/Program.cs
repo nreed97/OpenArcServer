@@ -406,22 +406,24 @@ try
         IOptions<ArxServerOptions> arxOpts,
         IOptions<PcxxOptions> pcxxOpts,
         IOptions<OpenArcServer.Core.Configuration.WebSocketOptions> wsOpts,
-        IOptions<DatabaseOptions> dbOpts) =>
+        IOptions<DatabaseOptions> dbOpts,
+        IOptions<DataFileOptions> dataFileOpts) =>
     {
         if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
         var s  = srvOpts.Value;  var t  = telOpts.Value;  var r  = rbnOpts.Value;
         var sp = spotOpts.Value; var a  = arxOpts.Value;  var pc = pcxxOpts.Value;
-        var ws = wsOpts.Value;   var db = dbOpts.Value;
+        var ws = wsOpts.Value;   var db = dbOpts.Value;   var df = dataFileOpts.Value;
+        var api = apiOpts.Value;
         return Results.Ok(new
         {
             Server = new { s.NodeCallsign, s.SysopCallsign, s.ServerName, s.MotdFile },
             Telnet = new
             {
-                t.Enabled, t.Port, t.MaxConnections, t.IdleTimeoutMinutes,
+                t.Enabled, t.Port, t.BindAddress, t.MaxConnections, t.IdleTimeoutMinutes,
                 t.IntroMessage, t.WelcomeMessage, t.LogoutMessage,
                 t.InvalidCallsignMessage, t.BlockedMessage
             },
-            WebSocket = new { ws.Enabled, ws.Port },
+            WebSocket = new { ws.Enabled, ws.Port, ws.BindAddress },
             Rbn    = new { r.Enabled, r.Host, r.Port, r.Callsign, r.ReconnectDelaySeconds },
             SpotProcessing = new
             {
@@ -433,8 +435,20 @@ try
                 db.DxSpotRetentionDays, db.DxSpotMaxCount,
                 db.UserRetentionYears, db.AnnouncementRetentionDays, db.LogRetentionDays
             },
-            Arx  = new { a.Enabled, a.Port, a.ReconnectDelaySeconds },
-            Pcxx = new { pc.Enabled },
+            DataFiles = new
+            {
+                df.CtyDatPath, df.BandModePath, df.BadWordPath,
+                df.CallBlockPath, df.ConnectBlockPath, df.DxSpotBlockPath,
+                df.StatesPath, df.ProvincesPath
+            },
+            Arx  = new { a.Enabled, a.Port, a.BindAddress, a.ReconnectDelaySeconds },
+            Pcxx = new
+            {
+                pc.Enabled, pc.Port, pc.BindAddress, pc.MaxNodeConnections,
+                pc.PingIntervalSeconds, pc.NodeTimeoutMinutes,
+                pc.IgnoreNodeUserProtocol, pc.LogOutboundNodeUser
+            },
+            Api  = new { api.Port, api.BindAddress },   // AdminKey intentionally omitted
         });
     });
 
