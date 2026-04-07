@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenArcServer.Core;
 using OpenArcServer.Core.Configuration;
+using OpenArcServer.Core.Models;
 using OpenArcServer.Core.Services;
 using OpenArcServer.Core.Sessions;
 
@@ -115,6 +116,7 @@ public sealed class ArxOutboundConnector : BackgroundService
 
         var arxRegistry  = sp.GetRequiredService<IArxClientRegistry>();
         var arxProcessor = sp.GetRequiredService<IArxMessageProcessor>();
+        var nodes        = sp.GetRequiredService<INodeManager>();
         var serverOpts   = sp.GetRequiredService<IOptions<ServerOptions>>().Value;
 
         var stream   = client.GetStream();
@@ -153,6 +155,17 @@ public sealed class ArxOutboundConnector : BackgroundService
         };
         arxRegistry.Add(session);
 
+        // Register peer as a node so it shows up in SH/N and /api/nodes
+        var nodeRecord = new NodeRecord
+        {
+            Callsign         = peerCallsign,
+            Software         = "AR-Cluster",
+            Version          = "ARx2",
+            RemoteEndpoint   = endpoint,
+            HandshakeComplete = true,
+        };
+        nodes.AddNode(nodeRecord, session);
+
         try
         {
             // Step 4: read loop — receive AB5K_Client_Dx frames from peer
@@ -178,6 +191,7 @@ public sealed class ArxOutboundConnector : BackgroundService
         finally
         {
             arxRegistry.Remove(session.SessionId);
+            nodes.RemoveNode(peerCallsign);
             _log.LogInformation("ARx outbound {Peer} ({Callsign}) disconnected", label, peerCallsign);
         }
     }

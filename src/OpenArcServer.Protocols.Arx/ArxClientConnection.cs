@@ -24,6 +24,7 @@ public sealed class ArxClientConnection
 {
     private readonly TcpClient _client;
     private readonly IArxClientRegistry _arxRegistry;
+    private readonly IConnectionManager _connections;
     private readonly IArxMessageProcessor _arxProcessor;
     private readonly ServerOptions _serverOpts;
     private readonly ILogger<ArxClientConnection> _log;
@@ -31,12 +32,14 @@ public sealed class ArxClientConnection
     public ArxClientConnection(
         TcpClient client,
         IArxClientRegistry arxRegistry,
+        IConnectionManager connections,
         IArxMessageProcessor arxProcessor,
         IOptions<ServerOptions> serverOpts,
         ILogger<ArxClientConnection> log)
     {
         _client       = client;
         _arxRegistry  = arxRegistry;
+        _connections  = connections;
         _arxProcessor = arxProcessor;
         _serverOpts   = serverOpts.Value;
         _log          = log;
@@ -83,6 +86,7 @@ public sealed class ArxClientConnection
                 await stream.WriteAsync(bytes, token);
             };
             _arxRegistry.Add(session);
+            _connections.AddSession(session);   // visible in SH/U and /api/users
 
             // Read any ARx2 frames sent by the client after login
             // (e.g. AB5K_Client_DxSpot spot posting frames).
@@ -119,6 +123,7 @@ public sealed class ArxClientConnection
             if (session is not null)
             {
                 _arxRegistry.Remove(session.SessionId);
+                _connections.RemoveSession(session.SessionId);
                 _log.LogInformation("ARx2 client disconnected: {Callsign} from {Endpoint}",
                     session.Callsign, endpoint);
             }
