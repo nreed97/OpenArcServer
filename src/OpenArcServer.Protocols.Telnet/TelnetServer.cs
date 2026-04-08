@@ -16,6 +16,7 @@ public sealed class TelnetServer : BackgroundService
     private readonly TelnetOptions _opts;
     private readonly RateLimitOptions _rl;
     private readonly IServiceProvider _services;
+    private readonly ServerStats _stats;
     private readonly ILogger<TelnetServer> _log;
 
     // Per-IP connection tracking: IP → (count in window, window start)
@@ -24,11 +25,13 @@ public sealed class TelnetServer : BackgroundService
     public TelnetServer(
         IOptions<TelnetOptions> opts,
         IOptions<RateLimitOptions> rateLimitOpts,
+        ServerStats stats,
         IServiceProvider services,
         ILogger<TelnetServer> log)
     {
         _opts     = opts.Value;
         _rl       = rateLimitOpts.Value;
+        _stats    = stats;
         _services = services;
         _log      = log;
     }
@@ -69,13 +72,23 @@ public sealed class TelnetServer : BackgroundService
                     continue;
                 }
 
+                var ip = client.Client.RemoteEndPoint is IPEndPoint ep
+                    ? ep.Address.ToString()
+                    : "unknown";
+
+                // IP block list check — checked before rate limiting so blocked IPs
+                // don't consume rate-limit slots
+                var ipBlock = _services.GetRequiredKeyedService<IFilterList>("ipblock");
+                if (ipBlock.IsBlocked(ip))
+                {
+                    _log.LogInformation("Blocked IP {IP} — dropping connection", ip);
+                    client.Dispose();
+                    continue;
+                }
+
                 // Per-IP connection rate limiting
                 if (_rl.Enabled && _rl.MaxConnectionsPerIpPerMinute > 0)
                 {
-                    var ip = client.Client.RemoteEndPoint is IPEndPoint ep
-                        ? ep.Address.ToString()
-                        : "unknown";
-
                     var now = DateTime.UtcNow;
                     var entry = _ipCounts.AddOrUpdate(
                         ip,
@@ -98,6 +111,8 @@ public sealed class TelnetServer : BackgroundService
                     }
                 }
 
+                _stats.RecordConnect();
+
                 var capturedClient = client;
                 _ = Task.Run(async () =>
                 {
@@ -110,6 +125,7 @@ public sealed class TelnetServer : BackgroundService
                         sp.GetRequiredService<ICommandRouter>(),
                         sp.GetRequiredService<IMessageDistributor>(),
                         sp.GetRequiredService<IUserRepository>(),
+                        sp.GetRequiredService<IWwvRepository>(),
                         sp.GetRequiredKeyedService<IFilterList>("connectblock"),
                         sp.GetRequiredService<IArxMessageProcessor>(),
                         sp.GetRequiredService<BuddyAlertService>(),

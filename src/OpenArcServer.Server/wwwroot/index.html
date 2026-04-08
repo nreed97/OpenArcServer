@@ -972,7 +972,7 @@ async function loadUsers() {
   const el = document.getElementById('users-container');
   if (!users || users.length === 0) { el.innerHTML = '<div class="empty">No users connected</div>'; return; }
   el.innerHTML = `<table>
-    <thead><tr><th>Callsign</th><th>Via</th><th>Name</th><th>QTH</th><th>Grid</th><th>Connected</th></tr></thead>
+    <thead><tr><th>Callsign</th><th>Via</th><th>Name</th><th>QTH</th><th>Grid</th><th>Connected</th><th>Filter</th></tr></thead>
     <tbody>
     ${users.map(u => `<tr>
       <td style="color:var(--accent);font-weight:600">${u.callsign}</td>
@@ -981,8 +981,70 @@ async function loadUsers() {
       <td>${u.qth  || '—'}</td>
       <td>${u.grid || '—'}</td>
       <td>${fmtTime(u.connectedAt)}</td>
+      <td><button class="btn" style="padding:2px 8px;font-size:11px" onclick="openFilterModal('${u.callsign}')">Edit</button></td>
     </tr>`).join('')}
     </tbody></table>`;
+}
+
+// ── Per-user spot filter modal ─────────────────────────────────────────────
+let _filterCallsign = '';
+
+async function openFilterModal(callsign) {
+  _filterCallsign = callsign;
+  document.getElementById('filter-modal-title').textContent = `Spot Filter — ${callsign}`;
+  document.getElementById('filter-modal-desc').textContent = 'Loading…';
+  document.getElementById('filter-bands').value = '';
+  document.getElementById('filter-modes').value = '';
+  document.getElementById('filter-conts').value = '';
+  document.getElementById('filter-zones').value = '';
+  document.getElementById('filter-modal').style.display = 'flex';
+
+  const d = await apiAdmin('GET', `/api/admin/users/${callsign}/filter`);
+  if (!d) return;
+  document.getElementById('filter-modal-desc').textContent = d.description;
+  document.getElementById('filter-bands').value = (d.bands || []).join(' ');
+  document.getElementById('filter-modes').value = (d.modes || []).join(' ');
+  document.getElementById('filter-conts').value = (d.continents || []).join(' ');
+  document.getElementById('filter-zones').value = (d.cqZones || []).join(' ');
+}
+
+function closeFilterModal() {
+  document.getElementById('filter-modal').style.display = 'none';
+}
+
+async function saveUserFilter() {
+  const bands = document.getElementById('filter-bands').value.trim()
+    .split(/\s+/).filter(Boolean).map(b => parseFloat(b.replace(/m$/i, ''))).filter(n => !isNaN(n));
+  const modes = document.getElementById('filter-modes').value.trim()
+    .split(/\s+/).filter(Boolean).map(m => m.toUpperCase());
+  const conts = document.getElementById('filter-conts').value.trim()
+    .split(/\s+/).filter(Boolean).map(c => c.toUpperCase());
+  const zones = document.getElementById('filter-zones').value.trim()
+    .split(/\s+/).filter(Boolean).map(Number).filter(n => !isNaN(n) && n >= 1 && n <= 40);
+
+  const r = await apiAdmin('PUT', `/api/admin/users/${_filterCallsign}/filter`, {
+    bands, modes, continents: conts, cqZones: zones
+  });
+  if (r?.applied) {
+    document.getElementById('filter-modal-desc').textContent = r.description;
+    setResult(`Filter updated for ${_filterCallsign}`);
+  } else {
+    setResult('Failed: ' + (r?.error || 'unknown error'), false);
+  }
+}
+
+async function clearUserFilter() {
+  const r = await apiAdmin('PUT', `/api/admin/users/${_filterCallsign}/filter`, {
+    bands: [], modes: [], continents: [], cqZones: []
+  });
+  if (r?.applied) {
+    document.getElementById('filter-modal-desc').textContent = r.description;
+    document.getElementById('filter-bands').value = '';
+    document.getElementById('filter-modes').value = '';
+    document.getElementById('filter-conts').value = '';
+    document.getElementById('filter-zones').value = '';
+    setResult(`Filter cleared for ${_filterCallsign}`);
+  }
 }
 
 // ── Nodes ─────────────────────────────────────────────────────────────────
@@ -1662,5 +1724,33 @@ loadEndpoints();
 connectFeed();
 setInterval(loadStats, 15000);
 </script>
+<!-- Per-user spot filter modal -->
+<div id="filter-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:24px;min-width:380px;max-width:520px;width:90%">
+    <h3 id="filter-modal-title" style="margin:0 0 6px 0;font-size:15px"></h3>
+    <div id="filter-modal-desc" style="font-size:12px;color:var(--muted);margin-bottom:16px;font-style:italic"></div>
+    <div class="form-row" style="margin-bottom:10px">
+      <label style="min-width:90px;font-size:12px">Bands (m)</label>
+      <input id="filter-bands" type="text" placeholder="20 40 15  (blank = all)" style="flex:1;font-size:12px">
+    </div>
+    <div class="form-row" style="margin-bottom:10px">
+      <label style="min-width:90px;font-size:12px">Modes</label>
+      <input id="filter-modes" type="text" placeholder="CW SSB FT8  (blank = all)" style="flex:1;font-size:12px">
+    </div>
+    <div class="form-row" style="margin-bottom:10px">
+      <label style="min-width:90px;font-size:12px">Continents</label>
+      <input id="filter-conts" type="text" placeholder="EU NA  (blank = all)" style="flex:1;font-size:12px">
+    </div>
+    <div class="form-row" style="margin-bottom:16px">
+      <label style="min-width:90px;font-size:12px">CQ Zones</label>
+      <input id="filter-zones" type="text" placeholder="14 25  (blank = all)" style="flex:1;font-size:12px">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="saveUserFilter()">Apply Filter</button>
+      <button class="btn" style="background:var(--muted);color:#fff" onclick="clearUserFilter()">Clear All</button>
+      <button class="btn" style="margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--text)" onclick="closeFilterModal()">Cancel</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

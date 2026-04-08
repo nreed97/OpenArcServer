@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using OpenArcServer.Core;
 using OpenArcServer.Core.Commands;
 using OpenArcServer.Core.Configuration;
+using OpenArcServer.Core.Models;
 using OpenArcServer.Core.Services;
 using OpenArcServer.Core.Sessions;
 using OpenArcServer.Engine.Commands;
@@ -25,6 +26,7 @@ public sealed class TelnetClientConnection
     private readonly IFilterList _connectBlock;
     private readonly IArxMessageProcessor _arxProcessor;
     private readonly BuddyAlertService _buddyAlerts;
+    private readonly IWwvRepository _wwv;
     private readonly TelnetOptions _opts;
     private readonly ServerOptions _serverOpts;
     private readonly ILogger<TelnetClientConnection> _log;
@@ -38,6 +40,7 @@ public sealed class TelnetClientConnection
         ICommandRouter router,
         IMessageDistributor distributor,
         IUserRepository users,
+        IWwvRepository wwv,
         IFilterList connectBlock,
         IArxMessageProcessor arxProcessor,
         BuddyAlertService buddyAlerts,
@@ -51,6 +54,7 @@ public sealed class TelnetClientConnection
         _router       = router;
         _distributor  = distributor;
         _users        = users;
+        _wwv          = wwv;
         _connectBlock = connectBlock;
         _arxProcessor = arxProcessor;
         _buddyAlerts  = buddyAlerts;
@@ -349,6 +353,22 @@ public sealed class TelnetClientConnection
             if (!string.IsNullOrWhiteSpace(motd))
                 await session.SendAsync!(motd.Replace("\n", "\r\n"), ct);
         }
+
+        // Show latest propagation report (WWV) so operators know band conditions on login
+        try
+        {
+            var wwvList = await _wwv.GetRecentAsync(1, ct);
+            if (wwvList.Count > 0)
+            {
+                var w = wwvList[0];
+                var date = w.Timestamp.ToString("dd-MMM-yyyy").ToUpper();
+                var time = w.Timestamp.ToString("HHmm") + "Z";
+                var forecast = string.IsNullOrWhiteSpace(w.Forecast) ? string.Empty : $", {w.Forecast}";
+                var body = $"WWV de {w.Spotter,-10} <{date}>: SFI={w.Sfi}, A={w.A}, K={w.K}{forecast}";
+                await session.SendAsync!($"{body,-72}{time}\r\n", ct);
+            }
+        }
+        catch { /* non-fatal */ }
 
         // Fire buddy connect alerts to online users who have this callsign on their list
         _ = Task.Run(() => _buddyAlerts.NotifyConnectedAsync(callsign, ct), ct);

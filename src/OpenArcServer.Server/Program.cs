@@ -125,7 +125,16 @@ try
     builder.Services.AddKeyedSingleton<IFilterList>("spotblock",
         (sp, _) => (IFilterList)sp.GetRequiredKeyedService<FilterListParser>("spotblock"));
 
+    builder.Services.AddKeyedSingleton<FilterListParser>("ipblock", (sp, _) =>
+    {
+        var opts = sp.GetRequiredService<IOptions<DataFileOptions>>().Value;
+        return new FilterListParser(opts.IpBlockPath);
+    });
+    builder.Services.AddKeyedSingleton<IFilterList>("ipblock",
+        (sp, _) => (IFilterList)sp.GetRequiredKeyedService<FilterListParser>("ipblock"));
+
     // Engine
+    builder.Services.AddSingleton<ServerStats>();
     builder.Services.AddSingleton<DuplicateSpotDetector>();
     builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
     builder.Services.AddSingleton<INodeManager, NodeManager>();
@@ -149,6 +158,8 @@ try
     builder.Services.AddSingleton<ShowUsersCommand>();
     builder.Services.AddSingleton<ShowNodesCommand>();
     builder.Services.AddSingleton<ShowConnectCommand>();
+    builder.Services.AddSingleton<ShowStatsCommand>();
+    builder.Services.AddSingleton<ShowSolarCommand>();
     builder.Services.AddSingleton<ShowVersionCommand>();
     builder.Services.AddSingleton<ShowTimeCommand>();
     builder.Services.AddSingleton<ByeCommand>();
@@ -198,6 +209,8 @@ try
         router.Register("SH U",           sp.GetRequiredService<ShowUsersCommand>());
         router.Register("SH N",           sp.GetRequiredService<ShowNodesCommand>());
         router.Register("SH CONNECT",     sp.GetRequiredService<ShowConnectCommand>());
+        router.Register("SH STATS",       sp.GetRequiredService<ShowStatsCommand>());
+        router.Register("SH SOLAR",       sp.GetRequiredService<ShowSolarCommand>());
         router.Register("SH VERSION",     sp.GetRequiredService<ShowVersionCommand>());
         router.Register("SH TIME",        sp.GetRequiredService<ShowTimeCommand>());
         router.Register("BYE",            sp.GetRequiredService<ByeCommand>());
@@ -699,9 +712,10 @@ try
             "callblock"    => df.CallBlockPath,
             "connectblock" => df.ConnectBlockPath,
             "spotblock"    => df.DxSpotBlockPath,
+            "ipblock"      => df.IpBlockPath,
             _              => null,
         };
-        if (path is null) return Results.NotFound(new { error = $"Unknown filter '{name}'. Valid: badwords, callblock, connectblock, spotblock" });
+        if (path is null) return Results.NotFound(new { error = $"Unknown filter '{name}'. Valid: badwords, callblock, connectblock, spotblock, ipblock" });
         if (!Path.IsPathRooted(path))
             path = Path.Combine(app.Environment.ContentRootPath, path);
         try
@@ -729,12 +743,13 @@ try
         sp.GetRequiredKeyedService<FilterListParser>("callblock").Reload();
         sp.GetRequiredKeyedService<FilterListParser>("connectblock").Reload();
         sp.GetRequiredKeyedService<FilterListParser>("spotblock").Reload();
+        sp.GetRequiredKeyedService<FilterListParser>("ipblock").Reload();
 
         logger.LogInformation("Data files reloaded via admin API");
         return Results.Ok(new { reloaded = true, files = new[]
         {
             df.CtyDatPath, df.BandModePath,
-            df.BadWordPath, df.CallBlockPath, df.ConnectBlockPath, df.DxSpotBlockPath,
+            df.BadWordPath, df.CallBlockPath, df.ConnectBlockPath, df.DxSpotBlockPath, df.IpBlockPath,
         }});
     });
 
@@ -766,6 +781,7 @@ try
             "callblock"    => df.CallBlockPath,
             "connectblock" => df.ConnectBlockPath,
             "spotblock"    => df.DxSpotBlockPath,
+            "ipblock"      => df.IpBlockPath,
             _              => null,
         };
         if (path is null) return Results.NotFound(new { error = $"Unknown filter '{name}'." });
@@ -783,6 +799,99 @@ try
             return Results.Ok(new { saved = true, name });
         }
         catch (Exception ex) { return Results.Problem($"Could not write filter file: {ex.Message}"); }
+    });
+
+    // GET /api/admin/users/{callsign}/filter  — read the connected user's spot filter
+    admin.MapGet("/users/{callsign}/filter", (
+        HttpContext http,
+        IOptions<ApiOptions> apiOpts,
+        IConnectionManager connections,
+        string callsign) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+        var session = connections.FindByCallsign(callsign.ToUpperInvariant());
+        if (session is null)
+            return Results.NotFound(new { error = $"{callsign} is not connected" });
+
+        var f = session.SpotFilter;
+        return Results.Ok(new
+        {
+            callsign  = session.Callsign,
+            bands     = f.Bands?.Select(b => b.ToString("G")).ToArray() ?? Array.Empty<string>(),
+            modes     = f.Modes?.ToArray() ?? Array.Empty<string>(),
+            continents = f.Continents?.ToArray() ?? Array.Empty<string>(),
+            cqZones   = f.CqZones?.ToArray() ?? Array.Empty<int>(),
+            description = f.Describe(),
+        });
+    });
+
+    // PUT /api/admin/users/{callsign}/filter  — set a connected user's spot filter
+    admin.MapPut("/users/{callsign}/filter", async (
+        HttpContext http,
+        IOptions<ApiOptions> apiOpts,
+        IConnectionManager connections,
+        string callsign) =>
+    {
+        if (!IsAdminAuthorized(http, apiOpts.Value)) return Results.Unauthorized();
+        var session = connections.FindByCallsign(callsign.ToUpperInvariant());
+        if (session is null)
+            return Results.NotFound(new { error = $"{callsign} is not connected" });
+
+        JsonNode? body;
+        try { body = await JsonNode.ParseAsync(http.Request.Body); }
+        catch { return Results.BadRequest(new { error = "Invalid JSON body" }); }
+
+        var filter = session.SpotFilter;
+
+        // Bands: array of floats (e.g. [20, 40]) or null to clear
+        if (body?["bands"] is JsonArray bandsArr)
+        {
+            if (bandsArr.Count == 0)
+                filter.Bands = null;
+            else
+                filter.Bands = bandsArr
+                    .Select(b => b?.GetValue<float>())
+                    .Where(b => b.HasValue)
+                    .Select(b => b!.Value)
+                    .ToHashSet();
+        }
+
+        // Modes: array of strings (e.g. ["CW","SSB"]) or null to clear
+        if (body?["modes"] is JsonArray modesArr)
+        {
+            if (modesArr.Count == 0)
+                filter.Modes = null;
+            else
+                filter.Modes = new HashSet<string>(
+                    modesArr.Select(m => m?.GetValue<string>() ?? "").Where(m => m.Length > 0),
+                    StringComparer.OrdinalIgnoreCase);
+        }
+
+        // Continents: array of strings (e.g. ["EU","NA"]) or null to clear
+        if (body?["continents"] is JsonArray contsArr)
+        {
+            if (contsArr.Count == 0)
+                filter.Continents = null;
+            else
+                filter.Continents = new HashSet<string>(
+                    contsArr.Select(c => c?.GetValue<string>() ?? "").Where(c => c.Length > 0),
+                    StringComparer.OrdinalIgnoreCase);
+        }
+
+        // CQ zones: array of ints or null to clear
+        if (body?["cqZones"] is JsonArray zonesArr)
+        {
+            if (zonesArr.Count == 0)
+                filter.CqZones = null;
+            else
+                filter.CqZones = zonesArr
+                    .Select(z => z?.GetValue<int>())
+                    .Where(z => z.HasValue && z.Value >= 1 && z.Value <= 40)
+                    .Select(z => z!.Value)
+                    .ToHashSet();
+        }
+
+        return Results.Ok(new { applied = true, description = filter.Describe() });
     });
 
     await app.RunAsync();

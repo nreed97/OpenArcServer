@@ -48,6 +48,8 @@ public sealed class DataFileOptions
     public string DxSpotBlockPath { get; set; } = "data/DxSpotBlock.dat";
     public string StatesPath { get; set; } = "data/States.dat";
     public string ProvincesPath { get; set; } = "data/Provinces.dat";
+    /// <summary>One IP address or CIDR block per line. Connections from these IPs are rejected at accept time.</summary>
+    public string IpBlockPath { get; set; } = "data/IpBlock.dat";
 }
 
 public sealed class SpotProcessingOptions
