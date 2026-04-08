@@ -4,6 +4,7 @@ using OpenArcServer.Core.Commands;
 using OpenArcServer.Core.Models;
 using OpenArcServer.Core.Services;
 using OpenArcServer.Core.Sessions;
+using OpenArcServer.Engine.Spots;
 using Prometheus;
 
 namespace OpenArcServer.Engine.Distribution;
@@ -17,6 +18,7 @@ public sealed class MessageDistributor : IMessageDistributor
     private readonly INodeManager _nodes;
     private readonly IArxClientRegistry _arxClients;
     private readonly IWebSocketClientRegistry _wsClients;
+    private readonly ICtyLookup? _cty;
     private readonly ILogger<MessageDistributor> _log;
 
     public MessageDistributor(
@@ -24,12 +26,14 @@ public sealed class MessageDistributor : IMessageDistributor
         INodeManager nodes,
         IArxClientRegistry arxClients,
         IWebSocketClientRegistry wsClients,
-        ILogger<MessageDistributor> log)
+        ILogger<MessageDistributor> log,
+        ICtyLookup? cty = null)
     {
         _connections = connections;
         _nodes       = nodes;
         _arxClients  = arxClients;
         _wsClients   = wsClients;
+        _cty         = cty;
         _log = log;
     }
 
@@ -108,7 +112,68 @@ public sealed class MessageDistributor : IMessageDistributor
         IEnumerable<UserSession> targets = spotData is null
             ? sessions
             : sessions.Where(s => s.SpotFilter.Matches(spotData) && AllowsSpot(s, spotData));
-        await Task.WhenAll(targets.Select(s => SendToSessionAsync(s, text, ct)));
+
+        var targetList = targets.ToList();
+        var tasks = new List<Task>(targetList.Count);
+
+        foreach (var s in targetList)
+        {
+            tasks.Add(SendToSessionAsync(s, text, ct));
+
+            // Opt-in bearing/distance annotation — a separate line starting with spaces.
+            // This line is NEVER parsed by logging software (N1MM+, Logger32, DXLab, etc.)
+            // because those programs only match lines that start with "DX de".
+            if (spotData is not null && s.ShowDistance &&
+                !string.IsNullOrEmpty(s.Grid) && _cty is not null)
+            {
+                var annotation = BuildAnnotation(s, spotData);
+                if (annotation is not null)
+                    tasks.Add(SendToSessionAsync(s, annotation, ct));
+            }
+        }
+
+        await Task.WhenAll(tasks);
+    }
+
+    /// <summary>
+    /// Builds the optional per-session bearing/distance annotation line.
+    /// Returns null if the session grid is invalid or the call cannot be resolved.
+    /// </summary>
+    private string? BuildAnnotation(UserSession session, DxSpot spot)
+    {
+        try
+        {
+            if (!GeoCalculator.TryParseGrid(session.Grid!, out var userLat, out var userLon))
+                return null;
+
+            // Prefer CTY record for the DX station's position (accurate to entity centroid)
+            var rec = _cty!.LookupCallsign(spot.Call);
+            double targetLat, targetLon;
+            string label;
+
+            if (rec is not null)
+            {
+                targetLat = rec.Latitude;
+                targetLon = rec.Longitude;
+                label = $"{rec.CtyCode}: {rec.CountryName}  CQ{rec.CqZone}";
+            }
+            else
+            {
+                // No CTY match — nothing useful to annotate
+                return null;
+            }
+
+            var dist    = GeoCalculator.DistanceKm(userLat, userLon, targetLat, targetLon);
+            var bearing = GeoCalculator.BearingDeg(userLat, userLon, targetLat, targetLon);
+
+            // Pad to align with DX spot lines (72 chars wide); always starts with spaces
+            var body = $"  [{label,-30}  {bearing:F0}°  {dist:F0} km]";
+            return body + "\r\n";
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task SendToAllArxClientsAsync(

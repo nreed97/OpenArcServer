@@ -27,6 +27,12 @@ public sealed class UserSession
     /// <summary>When false the user suppresses Reverse Beacon Network (RBN) spots.</summary>
     public bool ReceiveRbn { get; set; } = true;
 
+    /// <summary>
+    /// When true, an extra bearing/distance annotation line is sent after each live DX spot.
+    /// Enabled via SET/SHOW/DIST — the DX spot line itself is never modified.
+    /// </summary>
+    public bool ShowDistance { get; set; }
+
     // Real-time spot filter (configured via SET/DX/BAND, MODE, CONT, CQ)
     public SpotFilter SpotFilter { get; } = new();
 

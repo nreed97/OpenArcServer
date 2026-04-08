@@ -100,6 +100,13 @@ public sealed class CommandRouter : ICommandRouter
             "ADD"       => 2,
             "DEL"       => 2,
             "BUDDY"     => 2,
+            "DXCC"      => 4,   // SH/DXCC — no sensible short form
+            "PREFIX"    => 3,   // SH/PRE
+            "STATS"     => 4,   // SH/STAT
+            "SOLAR"     => 3,   // SH/SOL
+            "CONNECT"   => 3,   // SH/CON
+            "NOSHOW"    => 6,   // SET/NOSHOW
+            "DIST"      => 2,   // SET/SHOW/DI
             _           => token.Length, // unknown tokens: only exact match
         };
 

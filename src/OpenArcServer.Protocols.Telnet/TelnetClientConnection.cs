@@ -2,6 +2,7 @@ using System.Buffers;
 using System.IO.Pipelines;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -135,12 +136,21 @@ public sealed class TelnetClientConnection
                 try
                 {
                     var profile = await _users.GetOrCreateAsync(session.Callsign, ct);
-                    profile.LastSeen = DateTime.UtcNow;
+                    profile.LastSeen      = DateTime.UtcNow;
+                    profile.ShowDistance  = session.ShowDistance;
+                    // Persist spot filter as compact JSON
+                    profile.SpotFilterJson = JsonSerializer.Serialize(new
+                    {
+                        Bands      = session.SpotFilter.Bands?.ToArray(),
+                        Modes      = session.SpotFilter.Modes?.ToArray(),
+                        Continents = session.SpotFilter.Continents?.ToArray(),
+                        CqZones    = session.SpotFilter.CqZones?.ToArray(),
+                    });
                     await _users.UpdateAsync(profile, ct);
                 }
                 catch (Exception ex)
                 {
-                    _log.LogWarning(ex, "Failed to update last-seen for {Callsign}", session.Callsign);
+                    _log.LogWarning(ex, "Failed to persist session state for {Callsign}", session.Callsign);
                 }
             }
             cts.Dispose();
@@ -331,11 +341,48 @@ public sealed class TelnetClientConnection
         await _users.UpdateAsync(profile, ct);
 
         // Restore persisted profile fields so they survive server restarts
-        session.Name    = profile.Name;
-        session.Qth     = profile.Qth;
-        session.Grid    = profile.Grid;
-        session.Email   = profile.Email;
-        session.DxCount = profile.DxCount;
+        session.Name         = profile.Name;
+        session.Qth          = profile.Qth;
+        session.Grid         = profile.Grid;
+        session.Email        = profile.Email;
+        session.DxCount      = profile.DxCount;
+        session.ShowDistance = profile.ShowDistance;
+
+        // Restore persistent spot filter
+        if (!string.IsNullOrEmpty(profile.SpotFilterJson))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(profile.SpotFilterJson);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("Bands", out var bandsEl) && bandsEl.ValueKind == JsonValueKind.Array)
+                {
+                    var set = bandsEl.EnumerateArray().Select(e => e.GetSingle()).ToHashSet();
+                    if (set.Count > 0) session.SpotFilter.Bands = set;
+                }
+                if (root.TryGetProperty("Modes", out var modesEl) && modesEl.ValueKind == JsonValueKind.Array)
+                {
+                    var set = new HashSet<string>(
+                        modesEl.EnumerateArray().Select(e => e.GetString() ?? "").Where(s => s.Length > 0),
+                        StringComparer.OrdinalIgnoreCase);
+                    if (set.Count > 0) session.SpotFilter.Modes = set;
+                }
+                if (root.TryGetProperty("Continents", out var contsEl) && contsEl.ValueKind == JsonValueKind.Array)
+                {
+                    var set = new HashSet<string>(
+                        contsEl.EnumerateArray().Select(e => e.GetString() ?? "").Where(s => s.Length > 0),
+                        StringComparer.OrdinalIgnoreCase);
+                    if (set.Count > 0) session.SpotFilter.Continents = set;
+                }
+                if (root.TryGetProperty("CqZones", out var zonesEl) && zonesEl.ValueKind == JsonValueKind.Array)
+                {
+                    var set = zonesEl.EnumerateArray().Select(e => e.GetInt32()).ToHashSet();
+                    if (set.Count > 0) session.SpotFilter.CqZones = set;
+                }
+            }
+            catch { /* malformed JSON — start with empty filter */ }
+        }
 
         _connections.AddSession(session);
         _log.LogInformation("{Callsign} connected from {Endpoint}", callsign, session.RemoteEndpoint);

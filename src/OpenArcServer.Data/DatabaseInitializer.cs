@@ -108,6 +108,23 @@ CREATE TABLE IF NOT EXISTS buddies (
 CREATE INDEX IF NOT EXISTS ix_buddies_owner ON buddies (owner_callsign);
 ";
         cmd.ExecuteNonQuery();
+
+        // ── Schema migrations (additive; no-op if column already exists) ──────
+        foreach (var migSql in new[]
+        {
+            "ALTER TABLE users ADD COLUMN spot_filter_json TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE users ADD COLUMN show_distance     INTEGER NOT NULL DEFAULT 0",
+        })
+        {
+            try
+            {
+                using var migCmd = conn.CreateCommand();
+                migCmd.CommandText = migSql;
+                migCmd.ExecuteNonQuery();
+            }
+            catch { /* column already exists — safe to ignore */ }
+        }
+
         _log.LogInformation("Database initialized successfully");
     }
 }

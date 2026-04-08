@@ -216,6 +216,43 @@ public sealed class ShowFilterCommand : IArcCommand
     public Task ExecuteAsync(CommandContext context, CancellationToken ct = default)
     {
         context.Response.Messages.Add(context.Session.SpotFilter.Describe());
+        context.Response.Messages.Add($"Distance : {(context.Session.ShowDistance ? "ON  (SET/NOSHOW/DIST to disable)" : "OFF (SET/SHOW/DIST to enable)")}");
+        context.Response.DistroType = DistroType.ToRequester;
+        return Task.CompletedTask;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SET/SHOW/DIST — enable bearing/distance annotation after each live DX spot
+// The standard DX spot line is never modified — loggers are unaffected.
+// ---------------------------------------------------------------------------
+public sealed class SetShowDistCommand : IArcCommand
+{
+    public Task ExecuteAsync(CommandContext context, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(context.Session.Grid))
+        {
+            context.Response.Messages.Add("SET/GRID <locator> first to enable distance annotations.");
+        }
+        else
+        {
+            context.Session.ShowDistance = true;
+            context.Response.Messages.Add("Bearing/distance annotations enabled after each DX spot.  SET/NOSHOW/DIST to disable.");
+        }
+        context.Response.DistroType = DistroType.ToRequester;
+        return Task.CompletedTask;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SET/NOSHOW/DIST — disable bearing/distance annotation
+// ---------------------------------------------------------------------------
+public sealed class SetNoShowDistCommand : IArcCommand
+{
+    public Task ExecuteAsync(CommandContext context, CancellationToken ct = default)
+    {
+        context.Session.ShowDistance = false;
+        context.Response.Messages.Add("Bearing/distance annotations disabled.");
         context.Response.DistroType = DistroType.ToRequester;
         return Task.CompletedTask;
     }

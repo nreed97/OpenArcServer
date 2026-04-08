@@ -54,27 +54,31 @@ VALUES ($callsign, $now, $now)";
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
 UPDATE users SET
-    name           = $name,
-    qth            = $qth,
-    grid           = $grid,
-    email          = $email,
-    latitude       = $lat,
-    longitude      = $lon,
-    dx_count       = $dx_count,
-    last_seen      = $last_seen,
-    total_connects = $total_connects
+    name             = $name,
+    qth              = $qth,
+    grid             = $grid,
+    email            = $email,
+    latitude         = $lat,
+    longitude        = $lon,
+    dx_count         = $dx_count,
+    last_seen        = $last_seen,
+    total_connects   = $total_connects,
+    spot_filter_json = $spot_filter_json,
+    show_distance    = $show_distance
 WHERE callsign = $callsign";
 
-        cmd.Parameters.AddWithValue("$callsign", profile.Callsign);
-        cmd.Parameters.AddWithValue("$name", profile.Name);
-        cmd.Parameters.AddWithValue("$qth", profile.Qth);
-        cmd.Parameters.AddWithValue("$grid", profile.Grid);
-        cmd.Parameters.AddWithValue("$email", profile.Email);
-        cmd.Parameters.AddWithValue("$lat", profile.Latitude);
-        cmd.Parameters.AddWithValue("$lon", profile.Longitude);
-        cmd.Parameters.AddWithValue("$dx_count", profile.DxCount);
-        cmd.Parameters.AddWithValue("$last_seen", profile.LastSeen.ToString("O"));
-        cmd.Parameters.AddWithValue("$total_connects", profile.TotalConnects);
+        cmd.Parameters.AddWithValue("$callsign",        profile.Callsign);
+        cmd.Parameters.AddWithValue("$name",            profile.Name);
+        cmd.Parameters.AddWithValue("$qth",             profile.Qth);
+        cmd.Parameters.AddWithValue("$grid",            profile.Grid);
+        cmd.Parameters.AddWithValue("$email",           profile.Email);
+        cmd.Parameters.AddWithValue("$lat",             profile.Latitude);
+        cmd.Parameters.AddWithValue("$lon",             profile.Longitude);
+        cmd.Parameters.AddWithValue("$dx_count",        profile.DxCount);
+        cmd.Parameters.AddWithValue("$last_seen",       profile.LastSeen.ToString("O"));
+        cmd.Parameters.AddWithValue("$total_connects",  profile.TotalConnects);
+        cmd.Parameters.AddWithValue("$spot_filter_json", profile.SpotFilterJson ?? string.Empty);
+        cmd.Parameters.AddWithValue("$show_distance",   profile.ShowDistance ? 1 : 0);
 
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -90,18 +94,29 @@ WHERE callsign = $callsign";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private static UserProfile ReadProfile(SqliteDataReader reader) => new()
+    private static UserProfile ReadProfile(SqliteDataReader reader)
     {
-        Callsign = reader.GetString(reader.GetOrdinal("callsign")),
-        Name = reader.GetString(reader.GetOrdinal("name")),
-        Qth = reader.GetString(reader.GetOrdinal("qth")),
-        Grid = reader.GetString(reader.GetOrdinal("grid")),
-        Email = reader.GetString(reader.GetOrdinal("email")),
-        Latitude = (float)reader.GetDouble(reader.GetOrdinal("latitude")),
-        Longitude = (float)reader.GetDouble(reader.GetOrdinal("longitude")),
-        DxCount = reader.GetInt32(reader.GetOrdinal("dx_count")),
-        FirstSeen = DateTime.Parse(reader.GetString(reader.GetOrdinal("first_seen"))),
-        LastSeen = DateTime.Parse(reader.GetString(reader.GetOrdinal("last_seen"))),
-        TotalConnects = reader.GetInt32(reader.GetOrdinal("total_connects")),
-    };
+        var profile = new UserProfile
+        {
+            Callsign      = reader.GetString(reader.GetOrdinal("callsign")),
+            Name          = reader.GetString(reader.GetOrdinal("name")),
+            Qth           = reader.GetString(reader.GetOrdinal("qth")),
+            Grid          = reader.GetString(reader.GetOrdinal("grid")),
+            Email         = reader.GetString(reader.GetOrdinal("email")),
+            Latitude      = (float)reader.GetDouble(reader.GetOrdinal("latitude")),
+            Longitude     = (float)reader.GetDouble(reader.GetOrdinal("longitude")),
+            DxCount       = reader.GetInt32(reader.GetOrdinal("dx_count")),
+            FirstSeen     = DateTime.Parse(reader.GetString(reader.GetOrdinal("first_seen"))),
+            LastSeen      = DateTime.Parse(reader.GetString(reader.GetOrdinal("last_seen"))),
+            TotalConnects = reader.GetInt32(reader.GetOrdinal("total_connects")),
+        };
+        // Columns added by migration — may not exist in very old DBs; use ordinal check
+        var filterOrd = reader.GetOrdinal("spot_filter_json");
+        if (!reader.IsDBNull(filterOrd))
+            profile.SpotFilterJson = reader.GetString(filterOrd);
+        var distOrd = reader.GetOrdinal("show_distance");
+        if (!reader.IsDBNull(distOrd))
+            profile.ShowDistance = reader.GetInt32(distOrd) != 0;
+        return profile;
+    }
 }

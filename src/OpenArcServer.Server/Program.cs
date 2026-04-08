@@ -154,7 +154,13 @@ try
         sp.GetRequiredService<DuplicateSpotDetector>(),
         sp.GetRequiredService<IOptions<SpotProcessingOptions>>(),
         sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<DxSpotCommand>>()));
-    builder.Services.AddSingleton<ShowDxCommand>();
+    builder.Services.AddSingleton<ShowDxCommand>(sp => new ShowDxCommand(
+        sp.GetRequiredService<IDxSpotRepository>(),
+        sp.GetRequiredService<ICtyLookup>()));
+    builder.Services.AddSingleton<ShowDxccCommand>(sp => new ShowDxccCommand(
+        sp.GetRequiredService<ICtyLookup>()));
+    builder.Services.AddSingleton<SetShowDistCommand>();
+    builder.Services.AddSingleton<SetNoShowDistCommand>();
     builder.Services.AddSingleton<ShowUsersCommand>();
     builder.Services.AddSingleton<ShowNodesCommand>();
     builder.Services.AddSingleton<ShowConnectCommand>();
@@ -249,6 +255,12 @@ try
         router.Register("ADD BUDDY",      sp.GetRequiredService<AddBuddyCommand>());
         router.Register("DEL BUDDY",      sp.GetRequiredService<DelBuddyCommand>());
         router.Register("SH BUDDY",       sp.GetRequiredService<ShowBuddyCommand>());
+        // DXCC / prefix lookup
+        router.Register("SH DXCC",        sp.GetRequiredService<ShowDxccCommand>());
+        router.Register("SH PREFIX",      sp.GetRequiredService<ShowDxccCommand>());
+        // Bearing/distance annotation toggle
+        router.Register("SET SHOW DIST",  sp.GetRequiredService<SetShowDistCommand>());
+        router.Register("SET NOSHOW DIST", sp.GetRequiredService<SetNoShowDistCommand>());
         // Test spot
         router.Register("TEST DX",        sp.GetRequiredService<TestDxCommand>());
         return router;

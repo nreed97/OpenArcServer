@@ -13,4 +13,8 @@ public sealed class UserProfile
     public DateTime FirstSeen { get; set; }
     public DateTime LastSeen { get; set; }
     public int TotalConnects { get; set; }
+    /// <summary>JSON serialisation of the user's persistent SpotFilter. Null or empty = no filter.</summary>
+    public string SpotFilterJson { get; set; } = string.Empty;
+    /// <summary>When true, a bearing/distance annotation is appended after each live DX spot.</summary>
+    public bool ShowDistance { get; set; }
 }
