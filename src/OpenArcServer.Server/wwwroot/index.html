@@ -352,16 +352,18 @@
       <h3>Filter Lists</h3>
       <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
         One entry per line. <strong>Bad Words</strong>: blocked spot comments.
-        <strong>Call Block</strong>: callsigns blocked from connecting.
-        <strong>Connect Block</strong>: blocked IP addresses or hostnames.
-        <strong>Spot Block</strong>: DX callsigns to suppress from spots.
-        Changes take effect on next server restart.
+        <strong>Call Block</strong>: callsigns blocked from all commands.
+        <strong>Connect Block</strong>: callsigns blocked from logging in.
+        <strong>Spot Block</strong>: DX callsigns whose spots are rejected.
+        <strong>IP Block</strong>: IP addresses rejected at TCP accept time.
+        Save then use <em>Reload Data Files</em> below to apply without restarting.
       </p>
       <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
         <button id="filter-tab-badwords"     onclick="showFilter('badwords')"     class="filter-tab active-filter-tab">Bad Words</button>
         <button id="filter-tab-callblock"    onclick="showFilter('callblock')"    class="filter-tab">Call Block</button>
         <button id="filter-tab-connectblock" onclick="showFilter('connectblock')" class="filter-tab">Connect Block</button>
         <button id="filter-tab-spotblock"    onclick="showFilter('spotblock')"    class="filter-tab">Spot Block</button>
+        <button id="filter-tab-ipblock"      onclick="showFilter('ipblock')"      class="filter-tab">IP Block</button>
       </div>
       <div class="form-row" style="align-items:flex-start">
         <label style="padding-top:6px" id="filter-label">Bad Words</label>
@@ -660,6 +662,11 @@
         <div class="field">
           <label>DX Spot Block List</label>
           <input type="text" id="cfg-DxSpotBlockPath" placeholder="data/DxSpotBlock.dat" />
+        </div>
+        <div class="field">
+          <label>IP Block List</label>
+          <input type="text" id="cfg-IpBlockPath" placeholder="data/IpBlock.dat" />
+          <div class="hint">One IP address per line — rejected at TCP accept time</div>
         </div>
         <div class="field">
           <label>States Data</label>
@@ -1278,6 +1285,7 @@ async function loadSettings() {
   setField('cfg-CallBlockPath',    d.DataFiles?.CallBlockPath);
   setField('cfg-ConnectBlockPath', d.DataFiles?.ConnectBlockPath);
   setField('cfg-DxSpotBlockPath',  d.DataFiles?.DxSpotBlockPath);
+  setField('cfg-IpBlockPath',      d.DataFiles?.IpBlockPath);
   setField('cfg-StatesPath',       d.DataFiles?.StatesPath);
   setField('cfg-ProvincesPath',    d.DataFiles?.ProvincesPath);
 
@@ -1510,6 +1518,7 @@ async function saveSettings(andRestart = false) {
       CallBlockPath:    safeStr('cfg-CallBlockPath'),
       ConnectBlockPath: safeStr('cfg-ConnectBlockPath'),
       DxSpotBlockPath:  safeStr('cfg-DxSpotBlockPath'),
+      IpBlockPath:      safeStr('cfg-IpBlockPath'),
       StatesPath:       safeStr('cfg-StatesPath'),
       ProvincesPath:    safeStr('cfg-ProvincesPath'),
     }),
@@ -1649,6 +1658,7 @@ async function saveMotd() {
 const FILTER_LABELS = {
   badwords: 'Bad Words', callblock: 'Call Block',
   connectblock: 'Connect Block', spotblock: 'Spot Block',
+  ipblock: 'IP Block',
 };
 
 function showFilter(name) {
