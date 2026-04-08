@@ -764,6 +764,27 @@
         </div>
       </div>
 
+      <!-- Security -->
+      <div class="settings-section">
+        <h3>Security</h3>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px">
+          Change the admin key used to access this dashboard.
+          The new key is hashed with SHA-256 and saved to <code>appsettings.json</code> immediately — no restart required.
+        </p>
+        <div class="field">
+          <label>New Admin Key</label>
+          <input type="password" id="cfg-new-admin-key" placeholder="Enter new key…" autocomplete="new-password" />
+        </div>
+        <div class="field">
+          <label>Confirm New Admin Key</label>
+          <input type="password" id="cfg-confirm-admin-key" placeholder="Confirm new key…" autocomplete="new-password" />
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+          <button class="btn" onclick="changeAdminKey()">Change Key</button>
+          <span id="change-key-result" style="font-size:12px"></span>
+        </div>
+      </div>
+
     </div><!-- .settings-grid -->
 
     <div class="settings-actions">
@@ -1570,6 +1591,47 @@ async function saveSettings(andRestart = false) {
     resEl.textContent = 'Error: ' + (r?.error || r?.title || JSON.stringify(r));
     setTimeout(() => resEl.textContent = '', 8000);
   }
+}
+
+async function changeAdminKey() {
+  const resEl = document.getElementById('change-key-result');
+  const newKey  = document.getElementById('cfg-new-admin-key').value;
+  const confirm = document.getElementById('cfg-confirm-admin-key').value;
+
+  resEl.style.color = 'var(--red)';
+  if (!newKey)            { resEl.textContent = 'Enter a new key.';              return; }
+  if (newKey !== confirm) { resEl.textContent = 'Keys do not match.';            return; }
+  if (newKey.length < 8)  { resEl.textContent = 'Key must be at least 8 chars.'; return; }
+
+  resEl.style.color = 'var(--muted)';
+  resEl.textContent = 'Hashing…';
+
+  // Step 1: hash the new key via the server
+  const hashRes = await apiAdmin('POST', '/api/admin/keyhash', { key: newKey });
+  if (!hashRes?.hash) {
+    resEl.style.color = 'var(--red)';
+    resEl.textContent = 'Error hashing key: ' + JSON.stringify(hashRes);
+    return;
+  }
+
+  // Step 2: write the new hash to appsettings.json; clear any legacy plaintext key
+  const saveRes = await apiAdmin('PUT', '/api/admin/settings', {
+    Api: { AdminKeyHash: hashRes.hash, AdminKey: '' }
+  });
+  if (!saveRes?.saved) {
+    resEl.style.color = 'var(--red)';
+    resEl.textContent = 'Error saving: ' + (saveRes?.error || JSON.stringify(saveRes));
+    return;
+  }
+
+  // Step 3: update the in-session key so the dashboard keeps working immediately
+  setAdminKey(newKey);
+
+  document.getElementById('cfg-new-admin-key').value     = '';
+  document.getElementById('cfg-confirm-admin-key').value = '';
+  resEl.style.color = 'var(--green)';
+  resEl.textContent = '✓ Admin key changed — no restart required';
+  setTimeout(() => resEl.textContent = '', 8000);
 }
 
 async function pollUntilBack() {
